@@ -6,7 +6,7 @@ The test example implements file uploading, listing files that have been uploade
 
 
 ### 1 Register from https://storage.titannet.io, and create API Key
-![Alt text](doc/c52301810bb6b88e31a73a9d257574b.png)
+![Alt text](doc/20231113173719.png)
 
 ### 2 Build example
     git clone github.com/Filecoin-Titan/titan-storage-sdk.git
