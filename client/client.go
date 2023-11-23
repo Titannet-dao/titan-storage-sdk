@@ -10,6 +10,7 @@ import (
 	"golang.org/x/xerrors"
 )
 
+// request defines the structure of a JSON RPC request.
 type request struct {
 	Jsonrpc string        `json:"jsonrpc"`
 	Method  string        `json:"method"`
@@ -26,6 +27,7 @@ type response struct {
 	Error   *respError  `json:"error,omitempty"`
 }
 
+// respError defines the structure of an error in the JSON RPC response.
 type respError struct {
 	Code    errorCode       `json:"code"`
 	Message string          `json:"message"`
@@ -35,10 +37,12 @@ type respError struct {
 type errorCode int
 type params []interface{}
 
+// Client is the JSON RPC client.
 type Client struct {
 	cfg Config
 }
 
+// NewClient creates a new JSON RPC client with the provided options.
 func NewClient(opts ...Option) *Client {
 	cfg := DefaultOption()
 
@@ -55,6 +59,7 @@ func NewClient(opts ...Option) *Client {
 	}
 }
 
+// request sends a JSON RPC request to the server.
 func (c *Client) request(ctx context.Context, data request) (*response, error) {
 	jsonData, err := json.Marshal(data)
 	if err != nil {

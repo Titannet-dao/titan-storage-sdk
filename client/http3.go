@@ -14,6 +14,7 @@ import (
 	"github.com/quic-go/quic-go/http3"
 )
 
+// addRootCA appends the root CA certificate to the certificate pool.
 func addRootCA(certPool *x509.CertPool, caCertPath string) error {
 	caCertRaw, err := os.ReadFile(caCertPath)
 	if err != nil {
@@ -26,8 +27,8 @@ func addRootCA(certPool *x509.CertPool, caCertPath string) error {
 	return nil
 }
 
-// NewHTTP3Client new http3 client with udp PacketConn
-// insecureSkipVerify default is true
+// NewHTTP3Client creates a new HTTP/3 client with a UDP PacketConn.
+// The insecureSkipVerify parameter determines whether to skip server certificate verification.
 func NewHTTP3Client(pConn net.PacketConn, insecureSkipVerify bool, caCertPath string) (*http.Client, error) {
 	pool, err := x509.SystemCertPool()
 	if err != nil {

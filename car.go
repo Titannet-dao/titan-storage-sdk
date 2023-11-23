@@ -22,7 +22,7 @@ import (
 	"github.com/multiformats/go-multihash"
 )
 
-// CreateCar creates a car
+// createCar creates a car
 func createCar(input string, output string) (cid.Cid, error) {
 	// make a cid with the right length that we eventually will patch with the root.
 	hasher, err := multihash.GetHasher(multihash.SHA2_256)
@@ -51,11 +51,10 @@ func createCar(input string, output string) (cid.Cid, error) {
 		return cid.Cid{}, err
 	}
 
-	// return nil
-	// re-open/finalize with the final root.
 	return root, car.ReplaceRootsInFile(output, []cid.Cid{root})
 }
 
+// writeFiles writes files to the blockstore and returns the root CID.
 func writeFiles(ctx context.Context, noWrap bool, bs *blockstore.ReadWrite, paths ...string) (cid.Cid, error) {
 	ls := cidlink.DefaultLinkSystem()
 	ls.TrustedStorage = true
@@ -121,6 +120,7 @@ func writeFiles(ctx context.Context, noWrap bool, bs *blockstore.ReadWrite, path
 	return rcl.Cid, nil
 }
 
+// CalculateCid calculates the CID for the given reader.
 func CalculateCid(r io.Reader) (cid.Cid, error) {
 	ls := cidlink.DefaultLinkSystem()
 	ls.TrustedStorage = true
@@ -145,6 +145,7 @@ func CalculateCid(r io.Reader) (cid.Cid, error) {
 	return root.Cid, nil
 }
 
+// CarStream is an interface that combines io.ReadWriter, io.ReaderAt, io.WriterAt, io.Seeker.
 type CarStream interface {
 	io.ReadWriter
 	io.ReaderAt
@@ -152,7 +153,7 @@ type CarStream interface {
 	io.Seeker
 }
 
-// CreateCar creates a car
+// createCarStream creates a car using a CarStream.
 func createCarStream(r io.Reader, carStream CarStream) (cid.Cid, error) {
 	// make a cid with the right length that we eventually will patch with the root.
 	hasher, err := multihash.GetHasher(multihash.SHA2_256)
@@ -188,6 +189,7 @@ func createCarStream(r io.Reader, carStream CarStream) (cid.Cid, error) {
 	return root, replaceRootsInCar(carStream, []cid.Cid{root})
 }
 
+// writeBuffer writes data to the car using a CarStream.
 func writeBuffer(ctx context.Context, r io.Reader, wCar carstorage.WritableCar) (cid.Cid, error) {
 	sCar := wCar.(*carstorage.StorageCar)
 	ls := cidlink.DefaultLinkSystem()
@@ -230,6 +232,7 @@ func writeBuffer(ctx context.Context, r io.Reader, wCar carstorage.WritableCar) 
 	return root.Cid, nil
 }
 
+// replaceRootsInCar replaces the roots in the car header.
 func replaceRootsInCar(carStream CarStream, roots []cid.Cid, opts ...car.Option) (err error) {
 	var v2h car.Header
 	if _, err = v2h.ReadFrom(carStream); err != nil {
