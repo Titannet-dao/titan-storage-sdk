@@ -38,14 +38,29 @@ type storageClose func()
 // ProgressFunc is a function type for reporting progress during file uploads
 type ProgressFunc func(doneSize int64, totalSize int64)
 
-// Storage is an interface for interacting with a storage system
+// Storage is an interface for interacting with titan storage
 type Storage interface {
+	// UploadFilesWithPath uploads files from the local file system to the titan storage.
+	// specified by the given filePath. It returns the CID (Content Identifier) and any error encountered.
 	UploadFilesWithPath(ctx context.Context, filePath string, progress ProgressFunc) (cid.Cid, error)
+	// UploadFileWithURL uploads a file from the specified URL to the titan storage.
+	// It returns the rootCID and the URL of the uploaded file, along with any error encountered.
 	UploadFileWithURL(ctx context.Context, url string, progress ProgressFunc) (string, string, error)
+	// UploadStream uploads data from an io.Reader stream to the titan storage.
+	// if name is empty, name will be the cid
+	// It returns the CID of the uploaded data and any error encountered.
 	UploadStream(ctx context.Context, r io.Reader, name string, progress ProgressFunc) (cid.Cid, error)
+	// ListUserAssets retrieves a list of user assets from the titan storage.
+	// It takes limit and offset parameters for pagination and returns the asset list and any error encountered.
 	ListUserAssets(ctx context.Context, limit, offset int) (*client.ListAssetRecordRsp, error)
+	// Delete removes the data associated with the specified rootCID from the titan storage
+	// It returns any error encountered during the deletion process.
 	Delete(ctx context.Context, rootCID string) error
+	// GetURL retrieves the URL associated with the specified rootCID from the titan storage.
+	// It returns the URL and any error encountered during the retrieval process.
 	GetURL(ctx context.Context, rootCID string) (string, error)
+	// GetFileWithCid retrieves the file content associated with the specified rootCID from the titan storage.
+	// It returns an io.ReadCloser for reading the file content and any error encountered during the retrieval process.
 	GetFileWithCid(ctx context.Context, rootCID string) (io.ReadCloser, error)
 }
 

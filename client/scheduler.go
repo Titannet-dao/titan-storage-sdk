@@ -8,6 +8,7 @@ import (
 	"time"
 )
 
+// AssetProperty represents the properties of an asset.
 type AssetProperty struct {
 	AssetCID  string
 	AssetName string
@@ -16,19 +17,21 @@ type AssetProperty struct {
 	NodeID    string
 }
 
+// CreateAssetRsp represents the response when creating an asset.
 type CreateAssetRsp struct {
 	UploadURL     string
 	Token         string
 	AlreadyExists bool
 }
 
-// NodeIPInfo
+// CandidateIPInfo represents information about a candidate IP.
 type CandidateIPInfo struct {
 	NodeID      string
 	IP          string
 	ExternalURL string
 }
 
+// ReplicaInfo represents information about a replica.
 type ReplicaInfo struct {
 	Hash        string
 	NodeID      string
@@ -38,7 +41,7 @@ type ReplicaInfo struct {
 	DoneSize    int64
 }
 
-// AssetRecord represents information about an asset record
+// AssetRecord represents information about an asset record.
 type AssetRecord struct {
 	CID                   string
 	Hash                  string
@@ -60,6 +63,7 @@ type AssetRecord struct {
 	SPCount int64
 }
 
+// UserAssetDetail represents detailed information about a user's asset.
 type UserAssetDetail struct {
 	UserID      string
 	Hash        string
@@ -71,6 +75,7 @@ type UserAssetDetail struct {
 	TotalSize   int64
 }
 
+// AssetOverview represents an overview of an asset.
 type AssetOverview struct {
 	AssetRecord      *AssetRecord
 	UserAssetDetail  *UserAssetDetail
@@ -78,22 +83,29 @@ type AssetOverview struct {
 	RemainVisitCount int
 }
 
-// ListAssetRecordRsp list asset records
+// ListAssetRecordRsp represents the response when listing asset records.
 type ListAssetRecordRsp struct {
 	Total          int              `json:"total"`
 	AssetOverviews []*AssetOverview `json:"asset_infos"`
 }
 
+// Scheduler defines the interface for the scheduler.
 type Scheduler interface {
+	// CreateUserAsset creates a new user asset.
 	CreateUserAsset(ctx context.Context, ap *AssetProperty) (*CreateAssetRsp, error)
+	// DeleteUserAsset deletes a user asset.
 	DeleteUserAsset(ctx context.Context, assetCID string) error
+	// ShareUserAssets shares user assets.
 	ShareUserAssets(ctx context.Context, assetCID []string) (map[string]string, error)
+	// GetCandidateIPs retrieves information about candidate IPs.
 	GetCandidateIPs(ctx context.Context) ([]*CandidateIPInfo, error)
+	// ListUserAssets retrieves a list of user assets with optional limit and offset.
 	ListUserAssets(ctx context.Context, limit, offset int) (*ListAssetRecordRsp, error) //perm:user
 }
 
 var _ Scheduler = (*scheduler)(nil)
 
+// NewScheduler creates a new Scheduler instance with the specified URL, headers, and options.
 func NewScheduler(url string, header http.Header, opts ...Option) Scheduler {
 	options := []Option{URLOption(url), HeaderOption(header)}
 	options = append(options, opts...)
@@ -107,6 +119,7 @@ type scheduler struct {
 	client *Client
 }
 
+// CreateUserAsset creates a new user asset.
 func (s *scheduler) CreateUserAsset(ctx context.Context, ap *AssetProperty) (*CreateAssetRsp, error) {
 	serializedParams := params{
 		ap,
@@ -142,6 +155,7 @@ func (s *scheduler) CreateUserAsset(ctx context.Context, ap *AssetProperty) (*Cr
 	return createAssetRsp, nil
 }
 
+// DeleteUserAsset deletes a user asset.
 func (s *scheduler) DeleteUserAsset(ctx context.Context, assetCID string) error {
 	serializedParams := params{
 		assetCID,
@@ -167,6 +181,7 @@ func (s *scheduler) DeleteUserAsset(ctx context.Context, assetCID string) error 
 
 }
 
+// ShareUserAssets shares user assets.
 func (s *scheduler) ShareUserAssets(ctx context.Context, assetCID []string) (map[string]string, error) {
 	serializedParams := params{
 		assetCID,
@@ -202,6 +217,7 @@ func (s *scheduler) ShareUserAssets(ctx context.Context, assetCID []string) (map
 	return ret, nil
 }
 
+// GetCandidateIPs retrieves candidate IPs.
 func (s *scheduler) GetCandidateIPs(ctx context.Context) ([]*CandidateIPInfo, error) {
 	req := request{
 		Jsonrpc: "2.0",
@@ -233,6 +249,7 @@ func (s *scheduler) GetCandidateIPs(ctx context.Context) ([]*CandidateIPInfo, er
 	return ret, nil
 }
 
+// ListUserAssets lists user assets.
 func (s *scheduler) ListUserAssets(ctx context.Context, limit, offset int) (*ListAssetRecordRsp, error) {
 	serializedParams := params{
 		limit,
