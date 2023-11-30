@@ -35,7 +35,7 @@ The test example implements file uploading, listing files that have been uploade
 ###  Installation
 To use the titan storage sdk, you'll first need to install Go and set up a Go development environment. Once you have Go installed and configured, you can install the titan storage sdk using Go modules:
 
-	go get github.com/Filecoin-Titan/titan-storage-sdk.git
+	go get github.com/Filecoin-Titan/titan-storage-sdk
 
 ### API 
 	UploadFilesWithPath(ctx context.Context, filePath string, progress ProgressFunc) (cid.Cid, error)
