@@ -9,11 +9,10 @@ import (
 	"time"
 
 	storage "github.com/Filecoin-Titan/titan-storage-sdk"
-	"github.com/Filecoin-Titan/titan/lib/tablewriter"
 	"github.com/spf13/cobra"
 )
 
-func getTitanURLAndApiKeyFromEnv() (string, string, error) {
+func getTitanURLAndAPIKeyFromEnv() (string, string, error) {
 	titanURL := os.Getenv("TITAN_URL")
 	apiKey := os.Getenv("API_KEY")
 	if len(titanURL) == 0 {
@@ -28,6 +27,7 @@ func getTitanURLAndApiKeyFromEnv() (string, string, error) {
 }
 
 var rootCmd = &cobra.Command{}
+var currentWorkingGroup = 0
 
 var versionCmd = &cobra.Command{
 	Use:   "version",
@@ -51,16 +51,15 @@ var uploadCmd = &cobra.Command{
 			log.Fatalf("File %s does not exist.", filePath)
 		}
 
-		titanURL, apiKey, err := getTitanURLAndApiKeyFromEnv()
+		titanURL, apiKey, err := getTitanURLAndAPIKeyFromEnv()
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		s, close, err := storage.NewStorage(titanURL, apiKey)
+		s, err := storage.NewStorage(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
 		if err != nil {
 			log.Fatal("NewStorage error ", err)
 		}
-		defer close()
 
 		startTime := time.Now()
 		progress := func(doneSize int64, totalSize int64) {
@@ -88,28 +87,27 @@ var listFilesCmd = &cobra.Command{
 			log.Fatal("please set --limit flag")
 		}
 
-		titanURL, apiKey, err := getTitanURLAndApiKeyFromEnv()
+		titanURL, apiKey, err := getTitanURLAndAPIKeyFromEnv()
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		s, close, err := storage.NewStorage(titanURL, apiKey)
+		s, err := storage.NewStorage(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
 		if err != nil {
 			log.Fatal("NewStorage error ", err)
 		}
-		defer close()
 
 		rets, err := s.ListUserAssets(context.Background(), limit, offst)
 		if err != nil {
 			log.Fatal("UploadFilesWithPath ", err)
 		}
 
-		tw := tablewriter.New(
-			tablewriter.Col("CID"),
-			tablewriter.Col("Name"),
-			tablewriter.Col("Size"),
-			tablewriter.Col("CreatedTime"),
-			tablewriter.Col("Expiration"),
+		tw := NewTableWriter(
+			Col("CID"),
+			Col("Name"),
+			Col("Size"),
+			Col("CreatedTime"),
+			Col("Expiration"),
 		)
 
 		for w := 0; w < len(rets.AssetOverviews); w++ {
@@ -145,16 +143,15 @@ var getFileCmd = &cobra.Command{
 			outFileName = cid
 		}
 
-		titanURL, apiKey, err := getTitanURLAndApiKeyFromEnv()
+		titanURL, apiKey, err := getTitanURLAndAPIKeyFromEnv()
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		s, close, err := storage.NewStorage(titanURL, apiKey)
+		s, err := storage.NewStorage(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
 		if err != nil {
 			log.Fatal("NewStorage error ", err)
 		}
-		defer close()
 
 		reader, err := s.GetFileWithCid(context.Background(), cid)
 		if err != nil {
@@ -203,16 +200,15 @@ var deleteFileCmd = &cobra.Command{
 
 		rootCID := args[0]
 
-		titanURL, apiKey, err := getTitanURLAndApiKeyFromEnv()
+		titanURL, apiKey, err := getTitanURLAndAPIKeyFromEnv()
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		s, close, err := storage.NewStorage(titanURL, apiKey)
+		s, err := storage.NewStorage(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
 		if err != nil {
 			log.Fatal("NewStorage error ", err)
 		}
-		defer close()
 
 		err = s.Delete(context.Background(), rootCID)
 		if err != nil {
@@ -234,16 +230,15 @@ var getURLCmd = &cobra.Command{
 
 		rootCID := args[0]
 
-		titanURL, apiKey, err := getTitanURLAndApiKeyFromEnv()
+		titanURL, apiKey, err := getTitanURLAndAPIKeyFromEnv()
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		s, close, err := storage.NewStorage(titanURL, apiKey)
+		s, err := storage.NewStorage(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
 		if err != nil {
 			log.Fatal("NewStorage error ", err)
 		}
-		defer close()
 
 		url, err := s.GetURL(context.Background(), rootCID)
 		if err != nil {
@@ -254,18 +249,149 @@ var getURLCmd = &cobra.Command{
 	},
 }
 
-func Execute() {
+var groupCmd = &cobra.Command{
+	Use:   "group",
+	Short: "Manage groups",
+}
+
+var createGroupCmd = &cobra.Command{
+	Use:   "create",
+	Short: "create --name abc --pid 0",
+	Run: func(cmd *cobra.Command, args []string) {
+		name, _ := cmd.Flags().GetString("name")
+		parentID, _ := cmd.Flags().GetInt("parentID")
+
+		fmt.Printf("Adding group %s to %d\n", name, parentID)
+
+		titanURL, apiKey, err := getTitanURLAndAPIKeyFromEnv()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		s, err := storage.NewStorage(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
+		if err != nil {
+			log.Fatal("NewStorage error ", err)
+		}
+
+		err = s.CreateGroup(cmd.Context(), name, parentID)
+		if err != nil {
+			log.Fatal("CreateGroup ", err)
+		}
+
+	},
+}
+
+var listGroupCmd = &cobra.Command{
+	Use:   "list",
+	Short: "list --parentID 0 -s 0 -e 20",
+	Run: func(cmd *cobra.Command, args []string) {
+		parentID, _ := cmd.Flags().GetInt("parentID")
+		start, _ := cmd.Flags().GetInt("start")
+		end, _ := cmd.Flags().GetInt("end")
+
+		count := end - start
+		if count <= 0 {
+			log.Fatal("can not special the start and end")
+		}
+
+		titanURL, apiKey, err := getTitanURLAndAPIKeyFromEnv()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		s, err := storage.NewStorage(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
+		if err != nil {
+			log.Fatal("NewStorage error ", err)
+		}
+
+		rsp, err := s.ListGroups(cmd.Context(), parentID, count, start)
+		if err != nil {
+			log.Fatal("CreateGroup ", err)
+		}
+
+		tw := NewTableWriter(
+			Col("ID"),
+			Col("Name"),
+			Col("UserID"),
+			Col("Parent"),
+			Col("AssetCount"),
+			Col("AssetSize"),
+			Col("CreatedTime"),
+		)
+
+		for _, group := range rsp.AssetGroups {
+			// asset := rets.AssetOverviews[w]
+			m := map[string]interface{}{
+				"ID":          group.ID,
+				"Name":        group.Name,
+				"UserID":      group.UserID,
+				"Parent":      group.Parent,
+				"AssetCount":  group.AssetCount,
+				"AssetSize":   group.AssetSize,
+				"CreatedTime": group.CreatedTime,
+			}
+
+			tw.Write(m)
+		}
+
+		tw.Flush(os.Stdout)
+		fmt.Println("Total ", rsp.Total)
+
+	},
+}
+
+var deleteGroupCmd = &cobra.Command{
+	Use:   "delete",
+	Short: "Delete a group",
+	Run: func(cmd *cobra.Command, args []string) {
+		parentID, _ := cmd.Flags().GetInt("groupID")
+
+		titanURL, apiKey, err := getTitanURLAndAPIKeyFromEnv()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		s, err := storage.NewStorage(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
+		if err != nil {
+			log.Fatal("NewStorage error ", err)
+		}
+
+		err = s.DeleteGroup(cmd.Context(), parentID)
+		if err != nil {
+			log.Fatal("DeleteGroup ", err)
+		}
+	},
+}
+
+func init() {
 	listFilesCmd.Flags().IntP("limit", "l", 20, "Limit the length of the list")
 	listFilesCmd.Flags().IntP("offset", "o", 0, "Limit the length of the list")
+
 	getFileCmd.Flags().String("cid", "", "the cid of file")
 	getFileCmd.Flags().String("out", "", "the path to save file")
 
+	createGroupCmd.Flags().StringP("name", "n", "", "special the name for group")
+	createGroupCmd.Flags().Int("parentID", 0, "special the parent for group")
+
+	listGroupCmd.Flags().Int("parentID", 0, "special the parent for group")
+	listGroupCmd.Flags().IntP("start", "s", 0, "special the start for list")
+	listGroupCmd.Flags().IntP("end", "e", 20, "special the end for list")
+
+	deleteGroupCmd.Flags().Int("groupID", 0, "special the group id")
+}
+
+func Execute() {
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(uploadCmd)
 	rootCmd.AddCommand(listFilesCmd)
 	rootCmd.AddCommand(getFileCmd)
 	rootCmd.AddCommand(deleteFileCmd)
 	rootCmd.AddCommand(getURLCmd)
+
+	groupCmd.AddCommand(createGroupCmd)
+	groupCmd.AddCommand(listGroupCmd)
+	groupCmd.AddCommand(deleteGroupCmd)
+	rootCmd.AddCommand(groupCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)

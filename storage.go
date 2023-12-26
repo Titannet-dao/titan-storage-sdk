@@ -3,11 +3,11 @@ package storage
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
 	"mime/multipart"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -20,6 +20,7 @@ import (
 	"github.com/Filecoin-Titan/titan-storage-sdk/client"
 	"github.com/Filecoin-Titan/titan-storage-sdk/memfile"
 	"github.com/ipfs/go-cid"
+	"github.com/quic-go/quic-go/http3"
 )
 
 // FileType represents the type of file or folder
@@ -31,9 +32,6 @@ const (
 	timeout                 = 30 * time.Second
 	titanHostName           = ".asset.titannet.io"
 )
-
-// storageClose is a function type for closing the storage
-type storageClose func()
 
 // ProgressFunc is a function type for reporting progress during file uploads
 type ProgressFunc func(doneSize int64, totalSize int64)
@@ -62,6 +60,12 @@ type Storage interface {
 	// GetFileWithCid retrieves the file content associated with the specified rootCID from the titan storage.
 	// It returns an io.ReadCloser for reading the file content and any error encountered during the retrieval process.
 	GetFileWithCid(ctx context.Context, rootCID string) (io.ReadCloser, error)
+	// CreateGroup create a group
+	CreateGroup(ctx context.Context, name string, parentID int) error
+	// ListGroup list groups
+	ListGroups(ctx context.Context, parentID, limit, offset int) (*client.ListAssetGroupRsp, error)
+	// DeleteGroup delete special group
+	DeleteGroup(ctx context.Context, groupID int) error //perm:user,web,admin
 }
 
 // storage is the implementation of the Storage interface
@@ -69,49 +73,66 @@ type storage struct {
 	schedulerAPI client.Scheduler
 	httpClient   *http.Client
 	candidateID  string
+	userID       string
+	// Setting the directory for file uploads
+	// default is 0, 0 is root directory
+	groupID int
+}
+
+type Config struct {
+	TitanURL string
+	APIKey   string
+	// Setting the directory for file uploads
+	// default is 0, 0 is root directory
+	GroupID int
 }
 
 // NewStorage creates a new Storage instance
-func NewStorage(titanURL, apiKey string) (Storage, storageClose, error) {
-	udpPacketConn, err := net.ListenPacket("udp", ":0")
-	if err != nil {
-		return nil, nil, fmt.Errorf("ListenPacket %w", err)
+func NewStorage(cfg *Config) (Storage, error) {
+	if len(cfg.TitanURL) == 0 || len(cfg.APIKey) == 0 {
+		return nil, fmt.Errorf("TitanURL or APIKey can not empty")
+	}
+	tlsConfig := tls.Config{InsecureSkipVerify: true}
+	httpClient := &http.Client{
+		Transport: &http3.RoundTripper{TLSClientConfig: &tlsConfig},
 	}
 
-	// use http3 client
-	httpClient, err := client.NewHTTP3Client(udpPacketConn, true, "")
+	locatorAPI := client.NewLocator(cfg.TitanURL, nil, client.HTTPClientOption(httpClient))
+	schedulerURL, err := locatorAPI.GetSchedulerWithAPIKey(context.Background(), cfg.APIKey)
 	if err != nil {
-		return nil, nil, fmt.Errorf("NewHTTP3Client %w", err)
-	}
-
-	locatorAPI := client.NewLocator(titanURL, nil, client.HTTPClientOption(httpClient))
-	schedulerURL, err := locatorAPI.GetSchedulerWithAPIKey(context.Background(), apiKey)
-	if err != nil {
-		return nil, nil, fmt.Errorf("GetSchedulerWithAPIKey %w", err)
+		return nil, fmt.Errorf("GetSchedulerWithAPIKey %w", err)
 	}
 
 	headers := http.Header{}
-	headers.Add("Authorization", "Bearer "+apiKey)
+	headers.Add("Authorization", "Bearer "+cfg.APIKey)
 
 	schedulerAPI := client.NewScheduler(schedulerURL, headers, client.HTTPClientOption(httpClient))
-	close := func() {
-		udpPacketConn.Close()
-	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
+	payload, err := schedulerAPI.AuthVerify(ctx, cfg.APIKey)
+	if err != nil {
+		return nil, fmt.Errorf("verify api key error %w", err)
+	}
+
+	// fmt.Printf("user id %s, permission %s", payload.ID, payload.AccessControlList)
+
 	candidates, err := schedulerAPI.GetCandidateIPs(ctx)
 	if err != nil {
-		return nil, nil, fmt.Errorf("GetCandidateIPs %w", err)
+		return nil, fmt.Errorf("GetCandidateIPs %w", err)
 	}
 
+	var fastNodeID string
 	fastNodes := getFastNodes(candidates)
-	if len(fastNodes) == 0 {
-		return nil, nil, fmt.Errorf("can not get any candidate node")
+	if len(fastNodes) > 0 {
+		fastNodeID = fastNodes[0].NodeID
+		// fmt.Println("use fast node ", fastNodeID)
+	} else {
+		fmt.Println("can not get any candidate node")
 	}
 
-	return &storage{schedulerAPI: schedulerAPI, httpClient: httpClient, candidateID: fastNodes[0].NodeID}, close, nil
+	return &storage{schedulerAPI: schedulerAPI, httpClient: httpClient, candidateID: fastNodeID, userID: payload.ID, groupID: 0}, nil
 }
 
 // UploadFilesWithPath uploads files from the specified path
@@ -153,14 +174,17 @@ func (s *storage) UploadFilesWithPath(ctx context.Context, filePath string, prog
 		return cid.Cid{}, err
 	}
 
-	assetProperty := &client.AssetProperty{
+	assetProperty := client.AssetProperty{
 		AssetCID:  root.String(),
 		AssetName: fileName,
 		AssetSize: fileInfo.Size(),
 		AssetType: fileType,
 		NodeID:    s.candidateID,
+		GroupID:   s.groupID,
 	}
-	rsp, err := s.schedulerAPI.CreateUserAsset(ctx, assetProperty)
+
+	req := client.CreateAssetReq{UserID: s.userID, AssetProperty: assetProperty}
+	rsp, err := s.schedulerAPI.CreateAsset(ctx, &req)
 	if err != nil {
 		return cid.Cid{}, fmt.Errorf("CreateUserAsset error %w", err)
 	}
@@ -171,7 +195,7 @@ func (s *storage) UploadFilesWithPath(ctx context.Context, filePath string, prog
 
 	err = s.uploadFileWithForm(ctx, carFile, fileName, rsp.UploadURL, rsp.Token, progress)
 	if err != nil {
-		if delErr := s.schedulerAPI.DeleteUserAsset(ctx, root.String()); delErr != nil {
+		if delErr := s.schedulerAPI.DeleteAsset(ctx, s.userID, root.String()); delErr != nil {
 			return cid.Cid{}, fmt.Errorf("uploadFileWithForm failed %s, delete error %s", err.Error(), delErr.Error())
 		}
 		return cid.Cid{}, fmt.Errorf("uploadFileWithForm error %s, delete it from titan", err.Error())
@@ -273,7 +297,7 @@ func getFileType(filePath string) (string, error) {
 
 // Delete deletes the specified asset by rootCID
 func (s *storage) Delete(ctx context.Context, rootCID string) error {
-	return s.schedulerAPI.DeleteUserAsset(ctx, rootCID)
+	return s.schedulerAPI.DeleteAsset(ctx, s.userID, rootCID)
 }
 
 // UploadStream uploads a stream of data
@@ -289,8 +313,17 @@ func (s *storage) UploadStream(ctx context.Context, r io.Reader, name string, pr
 		name = root.String()
 	}
 
-	assetProperty := &client.AssetProperty{AssetCID: root.String(), AssetName: name, AssetSize: int64(len(memFile.Bytes())), AssetType: string(FileTypeFile)}
-	rsp, err := s.schedulerAPI.CreateUserAsset(ctx, assetProperty)
+	assetProperty := client.AssetProperty{
+		AssetCID:  root.String(),
+		AssetName: name,
+		AssetSize: int64(len(memFile.Bytes())),
+		AssetType: string(FileTypeFile),
+		NodeID:    s.candidateID,
+		GroupID:   s.groupID,
+	}
+
+	req := client.CreateAssetReq{UserID: s.userID, AssetProperty: assetProperty}
+	rsp, err := s.schedulerAPI.CreateAsset(ctx, &req)
 	if err != nil {
 		return cid.Cid{}, fmt.Errorf("CreateUserAsset error %w", err)
 	}
@@ -301,7 +334,7 @@ func (s *storage) UploadStream(ctx context.Context, r io.Reader, name string, pr
 
 	err = s.uploadFileWithForm(ctx, memFile, root.String(), rsp.UploadURL, rsp.Token, progress)
 	if err != nil {
-		if delErr := s.schedulerAPI.DeleteUserAsset(ctx, root.String()); delErr != nil {
+		if delErr := s.schedulerAPI.DeleteAsset(ctx, s.userID, root.String()); delErr != nil {
 			return cid.Cid{}, fmt.Errorf("uploadFileWithForm failed %s, delete error %s", err.Error(), delErr.Error())
 		}
 		return cid.Cid{}, fmt.Errorf("uploadFileWithForm error %s, delete it from titan", err.Error())
@@ -350,7 +383,7 @@ func (s *storage) GetURL(ctx context.Context, rootCID string) (string, error) {
 	var startTime = time.Now()
 	var timeout = time.Minute
 	for {
-		rets, err := s.schedulerAPI.ShareUserAssets(ctx, []string{rootCID})
+		rets, err := s.schedulerAPI.ShareAssets(ctx, s.userID, []string{rootCID})
 		if err != nil {
 			if err.Error() != errAssetNotExist(rootCID).Error() {
 				return "", fmt.Errorf("ShareUserAssets %w", err)
@@ -489,5 +522,21 @@ func replaceNodeIDToCID(urlString string, cid string) string {
 }
 
 func (s *storage) ListUserAssets(ctx context.Context, limit, offset int) (*client.ListAssetRecordRsp, error) {
-	return s.schedulerAPI.ListUserAssets(ctx, limit, offset)
+	return s.schedulerAPI.ListAssets(ctx, s.userID, limit, offset, s.groupID)
+}
+
+// CreateGroup create a group
+func (s *storage) CreateGroup(ctx context.Context, name string, parentID int) error {
+	_, err := s.schedulerAPI.CreateAssetGroup(ctx, s.userID, name, parentID)
+	return err
+}
+
+// ListGroup list groups
+func (s *storage) ListGroups(ctx context.Context, parentID, limit, offset int) (*client.ListAssetGroupRsp, error) {
+	return s.schedulerAPI.ListAssetGroup(ctx, s.userID, parentID, limit, offset)
+}
+
+// DeleteGroup delete special group
+func (s *storage) DeleteGroup(ctx context.Context, groupID int) error {
+	return s.schedulerAPI.DeleteAssetGroup(ctx, s.userID, groupID)
 }
