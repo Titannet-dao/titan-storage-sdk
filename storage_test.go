@@ -62,11 +62,10 @@ func TestCreateCarWithStream(t *testing.T) {
 }
 
 func TestUpload(t *testing.T) {
-	storage, close, err := NewStorage(locatorURL, apiKey)
+	storage, err := NewStorage(&Config{TitanURL: locatorURL, APIKey: apiKey})
 	if err != nil {
 		t.Fatal("NewStorage error ", err)
 	}
-	defer close()
 
 	progress := func(doneSize int64, totalSize int64) {
 		t.Logf("upload %d of %d", doneSize, totalSize)
@@ -108,11 +107,10 @@ func TestUpload(t *testing.T) {
 }
 
 func TestUploadStream(t *testing.T) {
-	storage, close, err := NewStorage(locatorURL, apiKey)
+	storage, err := NewStorage(&Config{TitanURL: locatorURL, APIKey: apiKey})
 	if err != nil {
 		t.Fatal("NewStorage error ", err)
 	}
-	defer close()
 
 	progress := func(doneSize int64, totalSize int64) {
 		t.Logf("upload %d of %d", doneSize, totalSize)
@@ -134,11 +132,10 @@ func TestUploadStream(t *testing.T) {
 }
 
 func TestGetFile(t *testing.T) {
-	s, close, err := NewStorage(locatorURL, apiKey)
+	s, err := NewStorage(&Config{TitanURL: locatorURL, APIKey: apiKey})
 	if err != nil {
 		t.Fatal("NewStorage error ", err)
 	}
-	defer close()
 
 	storageObject := s.(*storage)
 	t.Log("candidate node ", storageObject.candidateID)
@@ -194,11 +191,10 @@ func TestGetFile(t *testing.T) {
 }
 
 func TestUploadFileWithURL(t *testing.T) {
-	s, close, err := NewStorage(locatorURL, apiKey)
+	s, err := NewStorage(&Config{TitanURL: locatorURL, APIKey: apiKey})
 	if err != nil {
 		t.Fatal("NewStorage error ", err)
 	}
-	defer close()
 
 	storageObject := s.(*storage)
 	t.Log("candidate ", storageObject.candidateID)
@@ -220,11 +216,10 @@ func TestUploadFileWithURL(t *testing.T) {
 }
 
 func TestListAsset(t *testing.T) {
-	s, close, err := NewStorage(locatorURL, apiKey)
+	s, err := NewStorage(&Config{TitanURL: locatorURL, APIKey: apiKey})
 	if err != nil {
 		t.Fatal("NewStorage error ", err)
 	}
-	defer close()
 
 	rsp, err := s.ListUserAssets(context.Background(), 20, 0)
 	if err != nil {
