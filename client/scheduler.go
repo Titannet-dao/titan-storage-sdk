@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	"golang.org/x/xerrors"
 )
 
 type JWTPayload struct {
@@ -240,7 +242,16 @@ func (s *scheduler) CreateAsset(ctx context.Context, caReq *CreateAssetReq) (*Cr
 	}
 
 	if rsp.Error != nil {
-		return nil, fmt.Errorf("%s code %d ", rsp.Error.Message, rsp.Error.Code)
+		if rsp.Error.Meta != nil {
+			errServer := ErrServer{}
+			if err = json.Unmarshal(rsp.Error.Meta, &errServer); err != nil {
+				return nil, xerrors.Errorf("unmarshal ErrServer error %w, message:%s", err, rsp.Error.Message)
+			}
+
+			return nil, &errServer
+		}
+
+		return nil, xerrors.New(rsp.Error.Message)
 	}
 
 	b, err := json.Marshal(rsp.Result)
