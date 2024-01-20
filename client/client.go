@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-
-	"golang.org/x/xerrors"
 )
 
 // request defines the structure of a JSON RPC request.
@@ -92,10 +90,6 @@ func (c *Client) request(ctx context.Context, data request) (*response, error) {
 	err = json.Unmarshal(body, &rsp)
 	if err != nil {
 		return nil, err
-	}
-
-	if rsp.Error != nil {
-		return nil, xerrors.New(rsp.Error.Message)
 	}
 
 	return &rsp, nil

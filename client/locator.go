@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+
+	"golang.org/x/xerrors"
 )
 
 // Locator defines the interface for a service locator.
@@ -43,6 +45,10 @@ func (l locator) GetSchedulerWithAPIKey(ctx context.Context, apiKey string) (str
 	rsp, err := l.client.request(ctx, req)
 	if err != nil {
 		return "", err
+	}
+
+	if rsp.Error != nil {
+		return "", xerrors.New(rsp.Error.Message)
 	}
 
 	b, err := json.Marshal(rsp.Result)

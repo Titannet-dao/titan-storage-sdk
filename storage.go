@@ -186,11 +186,18 @@ func (s *storage) UploadFilesWithPath(ctx context.Context, filePath string, prog
 	req := client.CreateAssetReq{UserID: s.userID, AssetProperty: assetProperty}
 	rsp, err := s.schedulerAPI.CreateAsset(ctx, &req)
 	if err != nil {
-		return cid.Cid{}, fmt.Errorf("CreateUserAsset error %w", err)
+		if es, ok := err.(*client.ErrServer); ok {
+			if es.Code == client.ErrNoDuplicateUploads {
+				return root, nil
+			}
+		} else {
+			fmt.Println("can not convert to ErrServer")
+		}
+		return cid.Cid{}, fmt.Errorf("CreateAsset error %w", err)
 	}
 
 	if rsp.AlreadyExists {
-		return cid.Cid{}, fmt.Errorf("asset %s already exist", root.String())
+		return root, nil
 	}
 
 	err = s.uploadFileWithForm(ctx, carFile, fileName, rsp.UploadURL, rsp.Token, progress)
@@ -325,11 +332,18 @@ func (s *storage) UploadStream(ctx context.Context, r io.Reader, name string, pr
 	req := client.CreateAssetReq{UserID: s.userID, AssetProperty: assetProperty}
 	rsp, err := s.schedulerAPI.CreateAsset(ctx, &req)
 	if err != nil {
-		return cid.Cid{}, fmt.Errorf("CreateUserAsset error %w", err)
+		if es, ok := err.(*client.ErrServer); ok {
+			if es.Code == client.ErrNoDuplicateUploads {
+				return root, nil
+			}
+		} else {
+			fmt.Println("can not convert to ErrServer")
+		}
+		return cid.Cid{}, fmt.Errorf("CreateAsset error %w", err)
 	}
 
 	if rsp.AlreadyExists {
-		return cid.Cid{}, fmt.Errorf("asset %s already exist", root.String())
+		return root, nil
 	}
 
 	err = s.uploadFileWithForm(ctx, memFile, root.String(), rsp.UploadURL, rsp.Token, progress)
