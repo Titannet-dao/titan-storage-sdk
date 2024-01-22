@@ -63,7 +63,7 @@ var uploadCmd = &cobra.Command{
 
 		startTime := time.Now()
 		progress := func(doneSize int64, totalSize int64) {
-			log.Printf("total size:%d bytes, dong %d bytes\n", totalSize, doneSize)
+			log.Printf("total size:%d bytes, done %d bytes\n", totalSize, doneSize)
 		}
 
 		cid, err := s.UploadFilesWithPath(context.Background(), filePath, progress)
