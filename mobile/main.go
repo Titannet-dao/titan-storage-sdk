@@ -1,6 +1,7 @@
 package TitanStorageMobile
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -79,12 +80,24 @@ func UploadFileWithURL(url string, handler ProgressHandler) (string, error) {
 	return fmt.Sprintf("{\"rootCID\":\"%s\", \"url\":\"%s\"}", cid, url), err
 }
 
+func UploadFileWithData(data []byte, name string, handler ProgressHandler) (string, error) {
+	progress := func(doneSize int64, totalSize int64) {
+		if handler != nil {
+			handler.OnProgress(doneSize, totalSize)
+		}
+	}
+	reader := bytes.NewReader(data)
+	originCid, err := storage_api.UploadStream(context.Background(), reader, name, progress)
+
+	return originCid.String(), err
+}
+
 func GetURL(rootCID string) (string, error) {
 	return storage_api.GetURL(context.Background(), rootCID)
 }
 
-func GetFileWithCid(url string) (data []byte, err error) {
-	readerCloser, err1 := storage_api.GetFileWithCid(context.Background(), url)
+func GetFileWithCid(rootCID string) (data []byte, err error) {
+	readerCloser, err1 := storage_api.GetFileWithCid(context.Background(), rootCID)
 	if err1 != nil {
 		err = err1
 		return
