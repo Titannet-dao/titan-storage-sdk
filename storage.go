@@ -33,6 +33,12 @@ const (
 	titanHostName           = ".asset.titannet.io"
 )
 
+type UploadFileResult struct {
+	Code int    `json:"code"`
+	Msg  string `json:"msg"`
+	Cid  string `json:"cid"`
+}
+
 // ProgressFunc is a function type for reporting progress during file uploads
 type ProgressFunc func(doneSize int64, totalSize int64)
 
@@ -40,7 +46,8 @@ type ProgressFunc func(doneSize int64, totalSize int64)
 type Storage interface {
 	// UploadFilesWithPath uploads files from the local file system to the titan storage.
 	// specified by the given filePath. It returns the CID (Content Identifier) and any error encountered.
-	UploadFilesWithPath(ctx context.Context, filePath string, progress ProgressFunc) (cid.Cid, error)
+	// if makeCar is true, it will make car in local, else will make car in server
+	UploadFilesWithPath(ctx context.Context, filePath string, progress ProgressFunc, makeCar bool) (cid.Cid, error)
 	// UploadFileWithURL uploads a file from the specified URL to the titan storage.
 	// It returns the rootCID and the URL of the uploaded file, along with any error encountered.
 	UploadFileWithURL(ctx context.Context, url string, progress ProgressFunc) (string, string, error)
@@ -100,7 +107,7 @@ func NewStorage(cfg *Config) (Storage, error) {
 	locatorAPI := client.NewLocator(cfg.TitanURL, nil, client.HTTPClientOption(httpClient))
 	schedulerURL, err := locatorAPI.GetSchedulerWithAPIKey(context.Background(), cfg.APIKey)
 	if err != nil {
-		return nil, fmt.Errorf("GetSchedulerWithAPIKey %w", err)
+		return nil, fmt.Errorf("GetSchedulerWithAPIKey %w, api key %s", err, cfg.APIKey)
 	}
 
 	headers := http.Header{}
@@ -127,7 +134,7 @@ func NewStorage(cfg *Config) (Storage, error) {
 	fastNodes := getFastNodes(candidates)
 	if len(fastNodes) > 0 {
 		fastNodeID = fastNodes[0].NodeID
-		// fmt.Println("use fast node ", fastNodeID)
+		fmt.Println("use fastest node ", fastNodeID)
 	} else {
 		fmt.Println("can not get any candidate node")
 	}
@@ -136,7 +143,77 @@ func NewStorage(cfg *Config) (Storage, error) {
 }
 
 // UploadFilesWithPath uploads files from the specified path
-func (s *storage) UploadFilesWithPath(ctx context.Context, filePath string, progress ProgressFunc) (cid.Cid, error) {
+func (s *storage) UploadFilesWithPath(ctx context.Context, filePath string, progress ProgressFunc, makeCar bool) (cid.Cid, error) {
+	if makeCar {
+		return s.uploadFilesWithPathAndMakeCar(ctx, filePath, progress)
+	}
+
+	rsp, err := s.schedulerAPI.GetNodeUploadInfo(ctx, s.userID)
+	if err != nil {
+		return cid.Cid{}, nil
+	}
+
+	f, err := os.Open(filePath)
+	if err != nil {
+		return cid.Cid{}, err
+	}
+	defer f.Close()
+
+	ret, err := s.uploadFileWithForm(ctx, f, f.Name(), rsp.UploadURL, rsp.Token, progress)
+	if err != nil {
+		return cid.Cid{}, fmt.Errorf("upload file with form failed, %s", err.Error())
+	}
+
+	if ret.Code != 0 {
+		return cid.Cid{}, fmt.Errorf("upload file with form failed, %s", ret.Msg)
+	}
+
+	root, err := cid.Decode(ret.Cid)
+	if err != nil {
+		return cid.Cid{}, fmt.Errorf("decode cid %s failed, %s", ret.Cid, err.Error())
+	}
+
+	fileType, err := getFileType(filePath)
+	if err != nil {
+		return cid.Cid{}, err
+	}
+
+	fileInfo, err := f.Stat()
+	if err != nil {
+		return cid.Cid{}, err
+	}
+
+	assetProperty := client.AssetProperty{
+		AssetCID:  ret.Cid,
+		AssetName: f.Name(),
+		AssetSize: fileInfo.Size(),
+		AssetType: fileType,
+		NodeID:    s.candidateID,
+		GroupID:   s.groupID,
+	}
+
+	req := client.CreateAssetReq{UserID: s.userID, AssetProperty: assetProperty}
+	createAssetRsp, err := s.schedulerAPI.CreateAsset(context.Background(), &req)
+	if err != nil {
+		if es, ok := err.(*client.ErrServer); ok {
+			if es.Code == client.ErrNoDuplicateUploads {
+				return root, nil
+			}
+		} else {
+			fmt.Println("can not convert to ErrServer")
+		}
+		return cid.Cid{}, fmt.Errorf("CreateAsset error %w", err)
+	}
+
+	if createAssetRsp.AlreadyExists {
+		return root, nil
+	}
+
+	return root, nil
+
+}
+
+func (s *storage) uploadFilesWithPathAndMakeCar(ctx context.Context, filePath string, progress ProgressFunc) (cid.Cid, error) {
 	// delete template file if exist
 	fileName := filepath.Base(filePath)
 	tempFile := path.Join(os.TempDir(), fileName)
@@ -200,7 +277,7 @@ func (s *storage) UploadFilesWithPath(ctx context.Context, filePath string, prog
 		return root, nil
 	}
 
-	err = s.uploadFileWithForm(ctx, carFile, fileName, rsp.UploadURL, rsp.Token, progress)
+	_, err = s.uploadFileWithForm(ctx, carFile, fileName, rsp.UploadURL, rsp.Token, progress)
 	if err != nil {
 		if delErr := s.schedulerAPI.DeleteAsset(ctx, s.userID, root.String()); delErr != nil {
 			return cid.Cid{}, fmt.Errorf("uploadFileWithForm failed %s, delete error %s", err.Error(), delErr.Error())
@@ -212,7 +289,7 @@ func (s *storage) UploadFilesWithPath(ctx context.Context, filePath string, prog
 }
 
 // uploadFileWithForm uploads a file using a multipart form
-func (s *storage) uploadFileWithForm(ctx context.Context, r io.Reader, name, uploadURL, token string, progress ProgressFunc) error {
+func (s *storage) uploadFileWithForm(ctx context.Context, r io.Reader, name, uploadURL, token string, progress ProgressFunc) (*UploadFileResult, error) {
 	// Create a new multipart form body
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
@@ -220,19 +297,19 @@ func (s *storage) uploadFileWithForm(ctx context.Context, r io.Reader, name, upl
 	// Create a new form field for the file
 	fileField, err := writer.CreateFormFile("file", name)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Copy the file data to the form field
 	_, err = io.Copy(fileField, r)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Close the multipart form
 	err = writer.Close()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	totalSize := body.Len()
@@ -249,7 +326,7 @@ func (s *storage) uploadFileWithForm(ctx context.Context, r io.Reader, name, upl
 	// Create a new HTTP request with the form data
 	request, err := http.NewRequest("POST", uploadURL, pr)
 	if err != nil {
-		return fmt.Errorf("new request error %s", err.Error())
+		return nil, fmt.Errorf("new request error %s", err.Error())
 	}
 
 	request.Header.Set("Content-Type", writer.FormDataContentType())
@@ -260,34 +337,30 @@ func (s *storage) uploadFileWithForm(ctx context.Context, r io.Reader, name, upl
 	client := http.DefaultClient
 	response, err := client.Do(request)
 	if err != nil {
-		return fmt.Errorf("do error %s", err.Error())
+		return nil, fmt.Errorf("do error %s", err.Error())
 	}
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
-		return fmt.Errorf("http StatusCode %d", response.StatusCode)
+		b, _ := io.ReadAll(response.Body)
+		return nil, fmt.Errorf("http StatusCode %d,  %s", response.StatusCode, string(b))
 	}
 
 	b, err := io.ReadAll(response.Body)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	type Result struct {
-		Code int    `json:"code"`
-		Err  int    `json:"err"`
-		Msg  string `json:"msg"`
-	}
-
-	var ret Result
+	var ret UploadFileResult
 	if err := json.Unmarshal(b, &ret); err != nil {
-		return err
+		return nil, err
 	}
 
 	if ret.Code != 0 {
-		return fmt.Errorf(ret.Msg)
+		return nil, fmt.Errorf(ret.Msg)
 	}
-	return nil
+
+	return &ret, nil
 }
 
 // getFileType returns the type of the file (file or folder)
@@ -346,7 +419,7 @@ func (s *storage) UploadStream(ctx context.Context, r io.Reader, name string, pr
 		return root, nil
 	}
 
-	err = s.uploadFileWithForm(ctx, memFile, root.String(), rsp.UploadURL, rsp.Token, progress)
+	_, err = s.uploadFileWithForm(ctx, memFile, root.String(), rsp.UploadURL, rsp.Token, progress)
 	if err != nil {
 		if delErr := s.schedulerAPI.DeleteAsset(ctx, s.userID, root.String()); delErr != nil {
 			return cid.Cid{}, fmt.Errorf("uploadFileWithForm failed %s, delete error %s", err.Error(), delErr.Error())

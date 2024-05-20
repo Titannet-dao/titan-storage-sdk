@@ -87,7 +87,7 @@ func TestUpload(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				_, err = storage.UploadFilesWithPath(context.Background(), path, progress)
+				_, err = storage.UploadFilesWithPath(context.Background(), path, progress, true)
 				if err != nil {
 					t.Log("upload file failed ", err.Error())
 					return nil
