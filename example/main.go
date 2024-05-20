@@ -40,7 +40,7 @@ var versionCmd = &cobra.Command{
 var uploadCmd = &cobra.Command{
 	Use:     "upload",
 	Short:   "upload file",
-	Example: "upload /path/to/my/file",
+	Example: "upload --make-car=true /path/to/my/file",
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) == 0 {
 			log.Fatal("Please specify the name of the file to be uploaded")
@@ -62,16 +62,20 @@ var uploadCmd = &cobra.Command{
 		}
 
 		startTime := time.Now()
+		fileSize := int64(0)
 		progress := func(doneSize int64, totalSize int64) {
+			fileSize = totalSize
 			log.Printf("total size:%d bytes, done %d bytes\n", totalSize, doneSize)
 		}
 
-		cid, err := s.UploadFilesWithPath(context.Background(), filePath, progress)
+		makeCar, _ := cmd.Flags().GetBool("make-car")
+		cid, err := s.UploadFilesWithPath(context.Background(), filePath, progress, makeCar)
 		if err != nil {
 			log.Fatal("UploadFilesWithPath ", err)
 		}
 
-		log.Printf("upload file %s cid %s success cost %dms\n", filePath, cid.String(), time.Since(startTime)/time.Millisecond)
+		costTime := time.Since(startTime) / time.Millisecond
+		log.Printf("upload file %s cid %s success %d bytes cost %dms, speed %d B/s\n", filePath, cid.String(), fileSize, costTime, fileSize/int64(costTime)*1000)
 	},
 }
 
@@ -184,7 +188,8 @@ var getFileCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		log.Printf("get %s success cost %dms", cid, time.Since(startTime)/time.Millisecond)
+		costTime := time.Since(startTime) / time.Millisecond
+		log.Printf("get %s success cost %d ms, size %d bytes, speed %d B/s", cid, costTime, size, size/int64(costTime)*1000)
 
 	},
 }
@@ -364,6 +369,8 @@ var deleteGroupCmd = &cobra.Command{
 }
 
 func init() {
+	uploadCmd.Flags().Bool("make-car", false, "make car")
+
 	listFilesCmd.Flags().IntP("limit", "l", 20, "Limit the length of the list")
 	listFilesCmd.Flags().IntP("offset", "o", 0, "Limit the length of the list")
 

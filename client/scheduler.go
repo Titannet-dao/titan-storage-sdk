@@ -138,6 +138,13 @@ type ListAssetSummaryRsp struct {
 	List  []*UserAssetSummary `json:"list"`
 }
 
+type UploadInfo struct {
+	UploadURL     string
+	Token         string
+	NodeID        string
+	AlreadyExists bool
+}
+
 // Scheduler defines the interface for the scheduler.
 type Scheduler interface {
 	// AuthVerify checks whether the specified token is valid and returns the list of permissions associated with it.
@@ -169,6 +176,9 @@ type Scheduler interface {
 	MoveAssetGroup(ctx context.Context, userID string, groupID, targetGroupID int) error //perm:user,web,admin
 	// GetAPPKeyPermissions get the permissions of user app key
 	GetAPPKeyPermissions(ctx context.Context, userID, keyName string) ([]string, error) //perm:user,web,admin
+
+	// GetNodeUploadInfo
+	GetNodeUploadInfo(ctx context.Context, userID string) (*UploadInfo, error) //perm:user,web,admin
 }
 
 var _ Scheduler = (*scheduler)(nil)
@@ -657,4 +667,39 @@ func (s *scheduler) GetAPPKeyPermissions(ctx context.Context, userID, keyName st
 		return nil, err
 	}
 	return ret, nil
+}
+
+// GetNodeUploadInfo
+func (s *scheduler) GetNodeUploadInfo(ctx context.Context, userID string) (*UploadInfo, error) {
+	serializedParams := params{
+		userID,
+	}
+
+	req := request{
+		Jsonrpc: "2.0",
+		Method:  "titan.GetNodeUploadInfo",
+		Params:  serializedParams,
+		ID:      1,
+	}
+
+	rsp, err := s.client.request(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	if rsp.Error != nil {
+		return nil, fmt.Errorf("%s code %d ", rsp.Error.Message, rsp.Error.Code)
+	}
+
+	b, err := json.Marshal(rsp.Result)
+	if err != nil {
+		return nil, err
+	}
+
+	ret := UploadInfo{}
+	err = json.Unmarshal(b, &ret)
+	if err != nil {
+		return nil, err
+	}
+	return &ret, nil
 }
