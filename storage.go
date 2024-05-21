@@ -183,9 +183,11 @@ func (s *storage) UploadFilesWithPath(ctx context.Context, filePath string, prog
 		return cid.Cid{}, err
 	}
 
+	fmt.Printf("f name %s, fileInfo name %s", f.Name(), fileInfo.Name())
+
 	assetProperty := client.AssetProperty{
 		AssetCID:  ret.Cid,
-		AssetName: f.Name(),
+		AssetName: fileInfo.Name(),
 		AssetSize: fileInfo.Size(),
 		AssetType: fileType,
 		NodeID:    s.candidateID,
