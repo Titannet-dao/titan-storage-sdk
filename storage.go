@@ -91,7 +91,8 @@ type Config struct {
 	APIKey   string
 	// Setting the directory for file uploads
 	// default is 0, 0 is root directory
-	GroupID int
+	GroupID     int
+	UseFastNode bool
 }
 
 // NewStorage creates a new Storage instance
@@ -125,20 +126,22 @@ func NewStorage(cfg *Config) (Storage, error) {
 
 	// fmt.Printf("user id %s, permission %s", payload.ID, payload.AccessControlList)
 
-	candidates, err := schedulerAPI.GetCandidateIPs(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("GetCandidateIPs %w", err)
-	}
+	fastNodeID := ""
+	if cfg.UseFastNode {
+		candidates, err := schedulerAPI.GetCandidateIPs(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("GetCandidateIPs %w", err)
+		}
 
-	var fastNodeID string
-	fastNodes := getFastNodes(candidates)
-	if len(fastNodes) > 0 {
-		fastNodeID = fastNodes[0].NodeID
-		fmt.Println("use fastest node ", fastNodeID)
-	} else {
-		fmt.Println("can not get any candidate node")
-	}
+		fastNodes := getFastNodes(candidates)
+		if len(fastNodes) > 0 {
+			fastNodeID = fastNodes[0].NodeID
+			fmt.Println("use fastest node ", fastNodeID)
+		} else {
+			fmt.Println("can not get any candidate node")
+		}
 
+	}
 	return &storage{schedulerAPI: schedulerAPI, httpClient: httpClient, candidateID: fastNodeID, userID: payload.ID, groupID: 0}, nil
 }
 
