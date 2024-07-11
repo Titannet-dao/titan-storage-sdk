@@ -193,7 +193,7 @@ func (s *storage) UploadFilesWithPath(ctx context.Context, filePath string, prog
 		AssetName: fileInfo.Name(),
 		AssetSize: fileInfo.Size(),
 		AssetType: fileType,
-		NodeID:    s.candidateID,
+		NodeID:    rsp.NodeID,
 		GroupID:   s.groupID,
 	}
 
