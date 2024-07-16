@@ -189,7 +189,11 @@ var getFileCmd = &cobra.Command{
 		}
 
 		costTime := time.Since(startTime) / time.Millisecond
-		log.Printf("get %s success cost %d ms, size %d bytes, speed %d B/s", cid, costTime, size, size/int64(costTime)*1000)
+		speed := int64(0)
+		if costTime > 0 {
+			speed = size / int64(costTime) * 1000
+		}
+		log.Printf("get %s success cost %d ms, size %d bytes, speed %d B/s", cid, costTime, size, speed)
 
 	},
 }
@@ -247,7 +251,7 @@ var getURLCmd = &cobra.Command{
 
 		url, err := s.GetURL(context.Background(), rootCID)
 		if err != nil {
-			log.Fatal("UploadFilesWithPath ", err)
+			log.Fatal("GetURL ", err)
 		}
 
 		log.Println(url)
