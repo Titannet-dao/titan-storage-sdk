@@ -44,8 +44,8 @@ func DeleteGroup(groupID int) error {
 	return storage_api.DeleteGroup(context.Background(), groupID)
 }
 
-func ListUserAssets(limit, offset int) (resp string, err error) {
-	originResp, err1 := storage_api.ListUserAssets(context.Background(), limit, offset)
+func ListUserAssets(parent, pageSize, page int) (resp string, err error) {
+	originResp, err1 := storage_api.ListUserAssets(context.Background(), parent, pageSize, page)
 	if err1 != nil {
 		err = err1
 		return
@@ -65,7 +65,7 @@ func UploadFilesWithPath(filePath string, handler ProgressHandler) (string, erro
 			handler.OnProgress(doneSize, totalSize)
 		}
 	}
-	originCid, err := storage_api.UploadFilesWithPath(context.Background(), filePath, progress)
+	originCid, err := storage_api.UploadFilesWithPath(context.Background(), filePath, progress, true)
 	return originCid.String(), err
 }
 

@@ -82,13 +82,18 @@ var uploadCmd = &cobra.Command{
 var listFilesCmd = &cobra.Command{
 	Use:     "list",
 	Short:   "list files",
-	Example: "list --limit=20 --offset=0",
+	Example: "list --group-id=0 --page-size=20 --page=1",
 	Run: func(cmd *cobra.Command, args []string) {
-		limit, _ := cmd.Flags().GetInt("limit")
-		offst, _ := cmd.Flags().GetInt("offset")
+		groupID, _ := cmd.Flags().GetInt("group-id")
+		pageSize, _ := cmd.Flags().GetInt("page-size")
+		page, _ := cmd.Flags().GetInt("page")
 
-		if limit == 0 {
-			log.Fatal("please set --limit flag")
+		if pageSize == 0 {
+			log.Fatal("please set --page-size")
+		}
+
+		if page <= 0 {
+			log.Fatal("page-size > 0")
 		}
 
 		titanURL, apiKey, err := getTitanURLAndAPIKeyFromEnv()
@@ -101,7 +106,7 @@ var listFilesCmd = &cobra.Command{
 			log.Fatal("NewStorage error ", err)
 		}
 
-		rets, err := s.ListUserAssets(context.Background(), limit, offst)
+		rets, err := s.ListUserAssets(context.Background(), groupID, pageSize, page)
 		if err != nil {
 			log.Fatal("UploadFilesWithPath ", err)
 		}
@@ -375,8 +380,9 @@ var deleteGroupCmd = &cobra.Command{
 func init() {
 	uploadCmd.Flags().Bool("make-car", false, "make car")
 
-	listFilesCmd.Flags().IntP("limit", "l", 20, "Limit the length of the list")
-	listFilesCmd.Flags().IntP("offset", "o", 0, "Limit the length of the list")
+	listFilesCmd.Flags().Int("group-id", 0, "the group id")
+	listFilesCmd.Flags().Int("page-size", 20, "Limit the page size")
+	listFilesCmd.Flags().Int("page", 1, "the page")
 
 	getFileCmd.Flags().String("cid", "", "the cid of file")
 	getFileCmd.Flags().String("out", "", "the path to save file")
