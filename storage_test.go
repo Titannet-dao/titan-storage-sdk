@@ -221,7 +221,7 @@ func TestListAsset(t *testing.T) {
 		t.Fatal("NewStorage error ", err)
 	}
 
-	rsp, err := s.ListUserAssets(context.Background(), 20, 0)
+	rsp, err := s.ListUserAssets(context.Background(), 0, 20, 1)
 	if err != nil {
 		t.Fatal("ListUserAssets ", err)
 	}
