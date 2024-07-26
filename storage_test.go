@@ -155,30 +155,26 @@ func TestGetFile(t *testing.T) {
 		t.Fatal("upload file failed ", err.Error())
 	}
 
-	url, err := s.GetURL(context.Background(), cid.String())
+	res, err := s.GetURL(context.Background(), cid.String())
 	if err != nil {
 		t.Fatal("get url ", err)
 	}
 
-	t.Log("url:", url)
+	t.Log("url:", res.URLs)
 
-	reader, err := s.GetFileWithCid(context.Background(), cid.String())
+	reader, _, err := s.GetFileWithCid(context.Background(), cid.String(), true)
 	if err != nil {
 		t.Fatal("get url ", err)
 	}
 	defer reader.Close()
 
 	data, err := io.ReadAll(reader)
+
 	if err != nil {
 		t.Fatal("get url ", err)
 	}
 
-	fileName, err := getFileNameFromURL(url)
-	if err != nil {
-		t.Fatal("getFileNameFromURL ", err)
-	}
-
-	newFilePath := fmt.Sprintf("./example/%s", fileName)
+	newFilePath := fmt.Sprintf("./example/%s", res.FileName)
 	newFile, err := os.Create(newFilePath)
 	if err != nil {
 		t.Fatal("Create file", err)
@@ -187,7 +183,7 @@ func TestGetFile(t *testing.T) {
 
 	newFile.Write(data)
 
-	t.Logf("write file %s %d", fileName, len(data))
+	t.Logf("write file %s %d", res.FileName, len(data))
 }
 
 func TestUploadFileWithURL(t *testing.T) {
