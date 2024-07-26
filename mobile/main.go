@@ -93,11 +93,15 @@ func UploadFileWithData(data []byte, name string, handler ProgressHandler) (stri
 }
 
 func GetURL(rootCID string) (string, error) {
-	return storage_api.GetURL(context.Background(), rootCID)
+	res, err := storage_api.GetURL(context.Background(), rootCID)
+	if err != nil {
+		return "", err
+	}
+	return res.URLs[0], nil
 }
 
 func GetFileWithCid(rootCID string) (data []byte, err error) {
-	readerCloser, err1 := storage_api.GetFileWithCid(context.Background(), rootCID)
+	readerCloser, _, err1 := storage_api.GetFileWithCid(context.Background(), rootCID, false)
 	if err1 != nil {
 		err = err1
 		return

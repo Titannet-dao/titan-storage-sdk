@@ -161,7 +161,9 @@ type VipInfo struct {
 type ShareAssetResult struct {
 	AssetCID string   `json:"asset_cid"`
 	Redirect bool     `json:"redirect"`
+	Size     int64    `json:"size"`
 	URLs     []string `json:"url"`
+	FileName string
 }
 
 type Result struct {

@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
+	"math"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -18,6 +20,7 @@ import (
 
 	"github.com/Filecoin-Titan/titan-storage-sdk/client"
 	"github.com/Filecoin-Titan/titan-storage-sdk/memfile"
+
 	"github.com/ipfs/go-cid"
 )
 
@@ -59,12 +62,13 @@ type Storage interface {
 	// Delete removes the data associated with the specified rootCID from the titan storage
 	// It returns any error encountered during the deletion process.
 	Delete(ctx context.Context, rootCID string) error
-	// GetURL retrieves the URL associated with the specified rootCID from the titan storage.
+	// GetURL retrieves the URL and asset size associated with the specified rootCID from the titan storage.
 	// It returns the URL and any error encountered during the retrieval process.
-	GetURL(ctx context.Context, rootCID string) (string, error)
+	GetURL(ctx context.Context, rootCID string) (*client.ShareAssetResult, error)
 	// GetFileWithCid retrieves the file content associated with the specified rootCID from the titan storage.
-	// It returns an io.ReadCloser for reading the file content and any error encountered during the retrieval process.
-	GetFileWithCid(ctx context.Context, rootCID string) (io.ReadCloser, error)
+	// parallel means multiple concurrent download tasks.
+	// It returns an io.ReadCloser for reading the file content and filename and any error encountered during the retrieval process.
+	GetFileWithCid(ctx context.Context, rootCID string, parallel bool) (io.ReadCloser, string, error)
 	// CreateGroup create a group
 	CreateGroup(ctx context.Context, name string, parentID int) error
 	// ListGroup list groups
@@ -417,31 +421,115 @@ func (s *storage) UploadStream(ctx context.Context, r io.Reader, name string, pr
 }
 
 // GetFileWithCid gets a single file by rootCID
-func (s *storage) GetFileWithCid(ctx context.Context, rootCID string) (io.ReadCloser, error) {
-	url, err := s.GetURL(ctx, rootCID)
+func (s *storage) GetFileWithCid(ctx context.Context, rootCID string, parallel bool) (io.ReadCloser, string, error) {
+	res, err := s.GetURL(ctx, rootCID)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
-	// Create a new HTTP request with the form data
-	request, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("new request error %s", err.Error())
-	}
-	request = request.WithContext(ctx)
-
-	// Create an HTTP client and send the request
-	client := http.DefaultClient
-	resp, err := client.Do(request)
-	if err != nil {
-		return nil, fmt.Errorf("do error %s", err.Error())
+	taskCount := int64(len(res.URLs))
+	if !parallel {
+		taskCount = 1
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("status code %d", resp.StatusCode)
+	type downloadReq struct {
+		url        string
+		start, end int64
+		index      int
 	}
 
-	return resp.Body, nil
+	var (
+		wg            sync.WaitGroup
+		mu            sync.Mutex
+		chunkSize     = res.Size / taskCount
+		chunks        = make([][]byte, taskCount)
+		firstFailChan = make(chan downloadReq, taskCount)
+		fastestTime   = math.MaxInt
+		fastestTask   downloadReq
+	)
+
+	downloadChunk := func(d downloadReq, fc chan downloadReq) {
+		defer wg.Done()
+		start := time.Now()
+
+		req, err := http.NewRequest("GET", d.url, nil)
+		if err != nil {
+			fc <- d
+			return
+		}
+		req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", d.start, d.end))
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			fc <- d
+			return
+		}
+
+		defer func() {
+			if resp != nil && resp.Body != nil {
+				resp.Body.Close()
+			}
+		}()
+
+		if resp.StatusCode != http.StatusPartialContent && resp.StatusCode != http.StatusOK {
+			log.Printf("failed to download chunk: %d-%d, status code: %d", d.start, d.end, resp.StatusCode)
+			fc <- d
+			return
+		}
+
+		data, err := io.ReadAll(resp.Body)
+		if err != nil {
+			fc <- d
+			return
+		}
+		elapsed := time.Since(start)
+		log.Printf("Chunk: %fs, Link: %s", elapsed.Seconds(), d.url)
+
+		mu.Lock()
+		if int(elapsed.Milliseconds()) < fastestTime {
+			fastestTime = int(elapsed.Milliseconds())
+			fastestTask = d
+		}
+		chunks[d.index] = data
+		mu.Unlock()
+	}
+
+	for i := 0; i < int(taskCount); i++ {
+		wg.Add(1)
+		start := int64(i) * chunkSize
+		end := start + chunkSize - 1
+		if i == int(taskCount)-1 {
+			end = res.Size - 1 // Ensure last chunk covers the remainder
+		}
+		go downloadChunk(downloadReq{res.URLs[i], start, end, i}, firstFailChan)
+	}
+
+	// wait normal
+	wg.Wait()
+	close(firstFailChan)
+
+	secFailChan := make(chan downloadReq, len(firstFailChan))
+	for fail := range firstFailChan {
+		wg.Add(1)
+		fail.url = fastestTask.url
+		log.Printf("retry download chunk: %d-%d", fail.start, fail.end)
+		downloadChunk(fail, secFailChan)
+	}
+	// wait failed
+	wg.Wait()
+	close(secFailChan)
+
+	if len(secFailChan) > 0 {
+		return nil, "", fmt.Errorf("failed to download all chunks")
+	}
+
+	readers := make([]io.Reader, len(chunks))
+	for i, chunk := range chunks {
+		readers[i] = bytes.NewReader(chunk)
+	}
+
+	multiReader := io.MultiReader(readers...)
+
+	return io.NopCloser(multiReader), res.FileName, nil
 }
 
 // errAssetNotExist returns an error indicating that the asset does not exist
@@ -450,7 +538,7 @@ func errAssetNotExist(cid string) error {
 }
 
 // GetURL gets the URL of the file
-func (s *storage) GetURL(ctx context.Context, rootCID string) (string, error) {
+func (s *storage) GetURL(ctx context.Context, rootCID string) (*client.ShareAssetResult, error) {
 	// 100 ms
 	var interval = 100
 	var startTime = time.Now()
@@ -459,18 +547,26 @@ func (s *storage) GetURL(ctx context.Context, rootCID string) (string, error) {
 		result, err := s.webAPI.ShareAsset(ctx, s.userID, "", rootCID)
 		if err != nil {
 			if err.Error() != errAssetNotExist(rootCID).Error() {
-				return "", fmt.Errorf("ShareUserAssets %w", err)
+				return nil, fmt.Errorf("ShareUserAssets %w", err)
 			}
 		}
 
-		if len(result.URLs) != 0 {
-			url := result.URLs[0]
-			url = replaceNodeIDToCID(url, rootCID)
-			return url, nil
+		if len(result.URLs) > 0 {
+			for i := range result.URLs {
+				result.URLs[i] = replaceNodeIDToCID(result.URLs[i], rootCID)
+			}
+			u, _ := url.ParseRequestURI(result.URLs[0])
+			if err != nil {
+				return result, nil
+			}
+			if u != nil && u.Query().Get("filename") != "" {
+				result.FileName = u.Query().Get("filename")
+			}
+			return result, nil
 		}
 
 		if time.Since(startTime) > timeout {
-			return "", fmt.Errorf("time out of %ds, can not find asset exist", timeout/time.Second)
+			return nil, fmt.Errorf("time out of %ds, can not find asset exist", timeout/time.Second)
 		}
 
 		time.Sleep(time.Millisecond * time.Duration(interval))
@@ -499,12 +595,12 @@ func (s *storage) UploadFileWithURL(ctx context.Context, url string, progress Pr
 		return "", "", err
 	}
 
-	newURL, err := s.GetURL(ctx, rootCid.String())
+	res, err := s.GetURL(ctx, rootCid.String())
 	if err != nil {
 		return "", "", err
 	}
 
-	return rootCid.String(), newURL, nil
+	return rootCid.String(), res.URLs[0], nil
 }
 
 // getFastNodes returns a list of fast nodes from the given candidates
