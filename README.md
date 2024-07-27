@@ -16,7 +16,7 @@ The test example implements file uploading, listing files that have been uploade
 
 ### 3 Setting environment variable
 	export API_KEY=YOUR-API-KEY
-	export TITAN_URL=https://cassini-locator.titannet.io:5000/rpc/v0
+	export TITAN_URL=https://api-test1.container1.titannet.io
 
 ### 4 run test
 ##### 4.1 Upload file
