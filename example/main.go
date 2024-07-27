@@ -378,7 +378,7 @@ var deleteGroupCmd = &cobra.Command{
 }
 
 func init() {
-	uploadCmd.Flags().Bool("make-car", false, "make car")
+	uploadCmd.Flags().Bool("make-car", true, "make car")
 
 	listFilesCmd.Flags().Int("group-id", 0, "the group id")
 	listFilesCmd.Flags().Int("page-size", 20, "Limit the page size")
