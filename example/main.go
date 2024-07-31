@@ -26,6 +26,10 @@ func getTitanURLAndAPIKeyFromEnv() (string, string, error) {
 	return titanURL, apiKey, nil
 }
 
+func getAreaIDFromEnv() string {
+	return os.Getenv("AREA_ID")
+}
+
 var rootCmd = &cobra.Command{}
 var currentWorkingGroup = 0
 
@@ -56,7 +60,7 @@ var uploadCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		s, err := storage.NewStorage(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
+		s, err := storage.NewStorage(&storage.Config{TitanURL: titanURL, APIKey: apiKey, AreaID: getAreaIDFromEnv()})
 		if err != nil {
 			log.Fatal("NewStorage error ", err)
 		}
