@@ -86,6 +86,7 @@ type storage struct {
 	// Setting the directory for file uploads
 	// default is 0, 0 is root directory
 	groupID int
+	areaID  string
 }
 
 type Config struct {
@@ -95,6 +96,7 @@ type Config struct {
 	// default is 0, 0 is root directory
 	GroupID     int
 	UseFastNode bool
+	AreaID      string
 }
 
 // NewStorage creates a new Storage instance
@@ -142,7 +144,7 @@ func NewStorage(cfg *Config) (Storage, error) {
 		}
 
 	}
-	return &storage{webAPI: webAPI, candidateID: fastNodeID, userID: vipInfo.UserID, groupID: 0}, nil
+	return &storage{webAPI: webAPI, candidateID: fastNodeID, userID: vipInfo.UserID, groupID: 0, areaID: cfg.AreaID}, nil
 }
 
 // UploadFilesWithPath uploads files from the specified path
@@ -197,7 +199,7 @@ func (s *storage) UploadFilesWithPath(ctx context.Context, filePath string, prog
 		GroupID:   s.groupID,
 	}
 
-	req := client.CreateAssetReq{AssetProperty: assetProperty}
+	req := client.CreateAssetReq{AssetProperty: assetProperty, AreaID: s.areaID}
 	_, err = s.webAPI.CreateAsset(context.Background(), &req)
 	if err != nil {
 		return cid.Cid{}, fmt.Errorf("CreateAsset error %w", err)
@@ -254,7 +256,7 @@ func (s *storage) uploadFilesWithPathAndMakeCar(ctx context.Context, filePath st
 		GroupID:   s.groupID,
 	}
 
-	req := client.CreateAssetReq{AssetProperty: assetProperty}
+	req := client.CreateAssetReq{AssetProperty: assetProperty, AreaID: s.areaID}
 	rsp, err := s.webAPI.CreateAsset(ctx, &req)
 	if err != nil {
 		return cid.Cid{}, fmt.Errorf("CreateAsset error %w", err)
@@ -397,7 +399,7 @@ func (s *storage) UploadStream(ctx context.Context, r io.Reader, name string, pr
 		GroupID:   s.groupID,
 	}
 
-	req := client.CreateAssetReq{AssetProperty: assetProperty}
+	req := client.CreateAssetReq{AssetProperty: assetProperty, AreaID: s.areaID}
 	rsp, err := s.webAPI.CreateAsset(ctx, &req)
 	if err != nil {
 		return cid.Cid{}, fmt.Errorf("CreateAsset error %w", err)
