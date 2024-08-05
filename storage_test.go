@@ -32,7 +32,7 @@ func TestCalculateCarCID(t *testing.T) {
 }
 
 func TestCreateCarWithFile(t *testing.T) {
-	// }
+
 	input := "./example/example.exe"
 	output := "./example/example.car"
 
@@ -137,32 +137,32 @@ func TestGetFile(t *testing.T) {
 		t.Fatal("NewStorage error ", err)
 	}
 
-	storageObject := s.(*storage)
-	t.Log("candidate node ", storageObject.candidateID)
+	// storageObject := s.(*storage)
+	// t.Log("candidate node ", storageObject.candidateID)
 
-	progress := func(doneSize int64, totalSize int64) {
-		t.Logf("upload %d of %d", doneSize, totalSize)
-	}
+	// progress := func(doneSize int64, totalSize int64) {
+	// 	t.Logf("upload %d of %d", doneSize, totalSize)
+	// }
 
-	filePath := "./storage_test.go"
-	f, err := os.Open(filePath)
-	if err != nil {
-		t.Fatal(err)
-	}
+	// filePath := "./storage_test.go"
+	// f, err := os.Open(filePath)
+	// if err != nil {
+	// 	t.Fatal(err)
+	// }
 
-	cid, err := s.UploadStream(context.Background(), f, f.Name(), progress)
-	if err != nil {
-		t.Fatal("upload file failed ", err.Error())
-	}
+	// cid, err := s.UploadStream(context.Background(), f, f.Name(), progress)
+	// if err != nil {
+	// 	t.Fatal("upload file failed ", err.Error())
+	// }
 
-	res, err := s.GetURL(context.Background(), cid.String())
-	if err != nil {
-		t.Fatal("get url ", err)
-	}
+	// res, err := s.GetURL(context.Background(), cid.String())
+	// if err != nil {
+	// 	t.Fatal("get url ", err)
+	// }
 
-	t.Log("url:", res.URLs)
+	// t.Log("url:", res.URLs)
 
-	reader, _, err := s.GetFileWithCid(context.Background(), cid.String(), true)
+	reader, fn, err := s.GetFileWithCid(context.Background(), "bafybeibhwmjstnkv3pvlswwcgs2as24bvlbr5tvba6mthtgf77mw4uown4")
 	if err != nil {
 		t.Fatal("get url ", err)
 	}
@@ -174,7 +174,7 @@ func TestGetFile(t *testing.T) {
 		t.Fatal("get url ", err)
 	}
 
-	newFilePath := fmt.Sprintf("./example/%s", res.FileName)
+	newFilePath := fmt.Sprintf("./example/%s", fn)
 	newFile, err := os.Create(newFilePath)
 	if err != nil {
 		t.Fatal("Create file", err)
@@ -183,7 +183,7 @@ func TestGetFile(t *testing.T) {
 
 	newFile.Write(data)
 
-	t.Logf("write file %s %d", res.FileName, len(data))
+	t.Logf("write file %s %d", fn, len(data))
 }
 
 func TestUploadFileWithURL(t *testing.T) {

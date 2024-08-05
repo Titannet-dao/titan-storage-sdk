@@ -147,10 +147,14 @@ type ListAssetSummaryRsp struct {
 }
 
 type UploadInfo struct {
-	UploadURL     string
-	Token         string
-	NodeID        string
+	List          []*NodeUploadInfo
 	AlreadyExists bool
+}
+
+type NodeUploadInfo struct {
+	UploadURL string
+	Token     string
+	NodeID    string
 }
 
 type VipInfo struct {
@@ -657,7 +661,46 @@ func (s *webserver) GetAPPKeyPermissions(ctx context.Context, userID, keyName st
 
 // GetNodeUploadInfo
 func (s *webserver) GetNodeUploadInfo(ctx context.Context, userID string) (*UploadInfo, error) {
-	return nil, nil
+	url := fmt.Sprintf("%s/api/v1/storage/get_upload_info?encrypted=false", s.url)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("apikey", s.apiKey)
+
+	rsp, err := s.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if rsp.StatusCode != http.StatusOK {
+		buf, _ := io.ReadAll(rsp.Body)
+		return nil, fmt.Errorf("status code %d %s", rsp.StatusCode, string(buf))
+	}
+
+	body, err := io.ReadAll(rsp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	ret := &Result{}
+	err = json.Unmarshal(body, ret)
+	if err != nil {
+		return nil, err
+	}
+
+	if ret.Code != 0 {
+		return nil, fmt.Errorf(fmt.Sprintf("code: %d, err: %d, msg: %s", ret.Code, ret.Err, ret.Msg))
+	}
+
+	uploadNodes := &UploadInfo{}
+	err = interfaceToStruct(ret.Data, uploadNodes)
+	if err != nil {
+		return nil, err
+	}
+
+	return uploadNodes, nil
 }
 
 func interfaceToStruct(input interface{}, output interface{}) error {

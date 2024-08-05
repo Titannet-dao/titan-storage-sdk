@@ -101,7 +101,7 @@ func GetURL(rootCID string) (string, error) {
 }
 
 func GetFileWithCid(rootCID string) (data []byte, err error) {
-	readerCloser, _, err1 := storage_api.GetFileWithCid(context.Background(), rootCID, false)
+	readerCloser, _, err1 := storage_api.GetFileWithCid(context.Background(), rootCID)
 	if err1 != nil {
 		err = err1
 		return
