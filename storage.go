@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
-	"math"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -20,6 +18,7 @@ import (
 
 	"github.com/Filecoin-Titan/titan-storage-sdk/client"
 	"github.com/Filecoin-Titan/titan-storage-sdk/memfile"
+	byterange "github.com/Filecoin-Titan/titan-storage-sdk/range"
 
 	"github.com/ipfs/go-cid"
 )
@@ -68,7 +67,7 @@ type Storage interface {
 	// GetFileWithCid retrieves the file content associated with the specified rootCID from the titan storage.
 	// parallel means multiple concurrent download tasks.
 	// It returns an io.ReadCloser for reading the file content and filename and any error encountered during the retrieval process.
-	GetFileWithCid(ctx context.Context, rootCID string, parallel bool) (io.ReadCloser, string, error)
+	GetFileWithCid(ctx context.Context, rootCID string) (io.ReadCloser, string, error)
 	// CreateGroup create a group
 	CreateGroup(ctx context.Context, name string, parentID int) error
 	// ListGroup list groups
@@ -155,7 +154,15 @@ func (s *storage) UploadFilesWithPath(ctx context.Context, filePath string, prog
 
 	rsp, err := s.webAPI.GetNodeUploadInfo(ctx, s.userID)
 	if err != nil {
-		return cid.Cid{}, nil
+		return cid.Cid{}, err
+	}
+
+	if rsp.AlreadyExists {
+		return cid.Cid{}, fmt.Errorf("file already exists")
+	}
+
+	if len(rsp.List) == 0 {
+		return cid.Cid{}, fmt.Errorf("endpoints is empty")
 	}
 
 	f, err := os.Open(filePath)
@@ -164,7 +171,9 @@ func (s *storage) UploadFilesWithPath(ctx context.Context, filePath string, prog
 	}
 	defer f.Close()
 
-	ret, err := s.uploadFileWithForm(ctx, f, f.Name(), rsp.UploadURL, rsp.Token, progress)
+	node := rsp.List[0]
+
+	ret, err := s.uploadFileWithForm(ctx, f, f.Name(), node.UploadURL, node.Token, progress)
 	if err != nil {
 		return cid.Cid{}, fmt.Errorf("upload file with form failed, %s", err.Error())
 	}
@@ -195,7 +204,7 @@ func (s *storage) UploadFilesWithPath(ctx context.Context, filePath string, prog
 		AssetName: fileInfo.Name(),
 		AssetSize: fileInfo.Size(),
 		AssetType: fileType,
-		NodeID:    rsp.NodeID,
+		NodeID:    node.NodeID,
 		GroupID:   s.groupID,
 	}
 
@@ -423,115 +432,119 @@ func (s *storage) UploadStream(ctx context.Context, r io.Reader, name string, pr
 }
 
 // GetFileWithCid gets a single file by rootCID
-func (s *storage) GetFileWithCid(ctx context.Context, rootCID string, parallel bool) (io.ReadCloser, string, error) {
+func (s *storage) GetFileWithCid(ctx context.Context, rootCID string) (io.ReadCloser, string, error) {
 	res, err := s.GetURL(ctx, rootCID)
 	if err != nil {
 		return nil, "", err
 	}
 
-	taskCount := int64(len(res.URLs))
-	if !parallel {
-		taskCount = 1
-	}
+	r := byterange.New(1 << 20)
+	reader, err := r.GetFile(ctx, res)
 
-	type downloadReq struct {
-		url        string
-		start, end int64
-		index      int
-	}
+	return reader, res.FileName, err
+	// taskCount := int64(len(res.URLs))
+	// if !parallel {
+	// 	taskCount = 1
+	// }
 
-	var (
-		wg            sync.WaitGroup
-		mu            sync.Mutex
-		chunkSize     = res.Size / taskCount
-		chunks        = make([][]byte, taskCount)
-		firstFailChan = make(chan downloadReq, taskCount)
-		fastestTime   = math.MaxInt
-		fastestTask   downloadReq
-	)
+	// type downloadReq struct {
+	// 	url        string
+	// 	start, end int64
+	// 	index      int
+	// }
 
-	downloadChunk := func(d downloadReq, fc chan downloadReq) {
-		defer wg.Done()
-		start := time.Now()
+	// var (
+	// 	wg            sync.WaitGroup
+	// 	mu            sync.Mutex
+	// 	chunkSize     = res.Size / taskCount
+	// 	chunks        = make([][]byte, taskCount)
+	// 	firstFailChan = make(chan downloadReq, taskCount)
+	// 	fastestTime   = math.MaxInt
+	// 	fastestTask   downloadReq
+	// )
 
-		req, err := http.NewRequest("GET", d.url, nil)
-		if err != nil {
-			fc <- d
-			return
-		}
-		req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", d.start, d.end))
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			fc <- d
-			return
-		}
+	// downloadChunk := func(d downloadReq, fc chan downloadReq) {
+	// 	defer wg.Done()
+	// 	start := time.Now()
 
-		defer func() {
-			if resp != nil && resp.Body != nil {
-				resp.Body.Close()
-			}
-		}()
+	// 	req, err := http.NewRequest("GET", d.url, nil)
+	// 	if err != nil {
+	// 		fc <- d
+	// 		return
+	// 	}
+	// 	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", d.start, d.end))
+	// 	resp, err := http.DefaultClient.Do(req)
+	// 	if err != nil {
+	// 		fc <- d
+	// 		return
+	// 	}
 
-		if resp.StatusCode != http.StatusPartialContent && resp.StatusCode != http.StatusOK {
-			log.Printf("failed to download chunk: %d-%d, status code: %d", d.start, d.end, resp.StatusCode)
-			fc <- d
-			return
-		}
+	// 	defer func() {
+	// 		if resp != nil && resp.Body != nil {
+	// 			resp.Body.Close()
+	// 		}
+	// 	}()
 
-		data, err := io.ReadAll(resp.Body)
-		if err != nil {
-			fc <- d
-			return
-		}
-		elapsed := time.Since(start)
-		log.Printf("Chunk: %fs, Link: %s", elapsed.Seconds(), d.url)
+	// 	if resp.StatusCode != http.StatusPartialContent && resp.StatusCode != http.StatusOK {
+	// 		log.Printf("failed to download chunk: %d-%d, status code: %d", d.start, d.end, resp.StatusCode)
+	// 		fc <- d
+	// 		return
+	// 	}
 
-		mu.Lock()
-		if int(elapsed.Milliseconds()) < fastestTime {
-			fastestTime = int(elapsed.Milliseconds())
-			fastestTask = d
-		}
-		chunks[d.index] = data
-		mu.Unlock()
-	}
+	// 	data, err := io.ReadAll(resp.Body)
+	// 	if err != nil {
+	// 		fc <- d
+	// 		return
+	// 	}
+	// 	elapsed := time.Since(start)
+	// 	log.Printf("Chunk: %fs, Link: %s", elapsed.Seconds(), d.url)
 
-	for i := 0; i < int(taskCount); i++ {
-		wg.Add(1)
-		start := int64(i) * chunkSize
-		end := start + chunkSize - 1
-		if i == int(taskCount)-1 {
-			end = res.Size - 1 // Ensure last chunk covers the remainder
-		}
-		go downloadChunk(downloadReq{res.URLs[i], start, end, i}, firstFailChan)
-	}
+	// 	mu.Lock()
+	// 	if int(elapsed.Milliseconds()) < fastestTime {
+	// 		fastestTime = int(elapsed.Milliseconds())
+	// 		fastestTask = d
+	// 	}
+	// 	chunks[d.index] = data
+	// 	mu.Unlock()
+	// }
 
-	// wait normal
-	wg.Wait()
-	close(firstFailChan)
+	// for i := 0; i < int(taskCount); i++ {
+	// 	wg.Add(1)
+	// 	start := int64(i) * chunkSize
+	// 	end := start + chunkSize - 1
+	// 	if i == int(taskCount)-1 {
+	// 		end = res.Size - 1 // Ensure last chunk covers the remainder
+	// 	}
+	// 	go downloadChunk(downloadReq{res.URLs[i], start, end, i}, firstFailChan)
+	// }
 
-	secFailChan := make(chan downloadReq, len(firstFailChan))
-	for fail := range firstFailChan {
-		wg.Add(1)
-		fail.url = fastestTask.url
-		log.Printf("retry download chunk: %d-%d", fail.start, fail.end)
-		downloadChunk(fail, secFailChan)
-	}
-	// wait failed
-	wg.Wait()
-	close(secFailChan)
+	// // wait normal
+	// wg.Wait()
+	// close(firstFailChan)
 
-	if len(secFailChan) > 0 {
-		return nil, "", fmt.Errorf("failed to download all chunks")
-	}
+	// secFailChan := make(chan downloadReq, len(firstFailChan))
+	// for fail := range firstFailChan {
+	// 	wg.Add(1)
+	// 	fail.url = fastestTask.url
+	// 	log.Printf("retry download chunk: %d-%d", fail.start, fail.end)
+	// 	downloadChunk(fail, secFailChan)
+	// }
+	// // wait failed
+	// wg.Wait()
+	// close(secFailChan)
 
-	readers := make([]io.Reader, len(chunks))
-	for i, chunk := range chunks {
-		readers[i] = bytes.NewReader(chunk)
-	}
+	// if len(secFailChan) > 0 {
+	// 	return nil, "", fmt.Errorf("failed to download all chunks")
+	// }
 
-	multiReader := io.MultiReader(readers...)
+	// readers := make([]io.Reader, len(chunks))
+	// for i, chunk := range chunks {
+	// 	readers[i] = bytes.NewReader(chunk)
+	// }
 
-	return io.NopCloser(multiReader), res.FileName, nil
+	// multiReader := io.MultiReader(readers...)
+
+	// return io.NopCloser(multiReader), res.FileName, nil
 }
 
 // errAssetNotExist returns an error indicating that the asset does not exist

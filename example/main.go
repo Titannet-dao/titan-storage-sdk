@@ -166,7 +166,7 @@ var getFileCmd = &cobra.Command{
 			log.Fatal("NewStorage error ", err)
 		}
 
-		reader, _, err := s.GetFileWithCid(context.Background(), cid, false)
+		reader, _, err := s.GetFileWithCid(context.Background(), cid)
 		if err != nil {
 			log.Fatal("UploadFilesWithPath ", err)
 		}
