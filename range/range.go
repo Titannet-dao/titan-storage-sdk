@@ -12,10 +12,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Filecoin-Titan/titan-storage-sdk/client"
-	"github.com/Filecoin-Titan/titan-storage-sdk/request"
 	"github.com/eikenb/pipeat"
 	logging "github.com/ipfs/go-log"
+	"github.com/utopiophere/titan-storage-sdk/client"
+	"github.com/utopiophere/titan-storage-sdk/request"
 )
 
 const (

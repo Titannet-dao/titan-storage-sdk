@@ -17,9 +17,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Filecoin-Titan/titan-storage-sdk/client"
-	"github.com/Filecoin-Titan/titan-storage-sdk/memfile"
-	byterange "github.com/Filecoin-Titan/titan-storage-sdk/range"
+	"github.com/utopiophere/titan-storage-sdk/client"
+	"github.com/utopiophere/titan-storage-sdk/memfile"
+	byterange "github.com/utopiophere/titan-storage-sdk/range"
 
 	"github.com/ipfs/go-cid"
 )
