@@ -14,8 +14,8 @@ import (
 
 	"github.com/eikenb/pipeat"
 	logging "github.com/ipfs/go-log"
-	"github.com/utopiophe/titan-storage-sdk/client"
-	"github.com/utopiophe/titan-storage-sdk/request"
+	"github.com/utopiosphe/titan-storage-sdk/client"
+	"github.com/utopiosphe/titan-storage-sdk/request"
 )
 
 const (
