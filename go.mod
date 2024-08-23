@@ -1,4 +1,4 @@
-module github.com/utopiophere/titan-storage-sdk
+module github.com/utopiophe/titan-storage-sdk
 
 go 1.21
 

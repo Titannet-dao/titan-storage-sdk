@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	storage "github.com/utopiophere/titan-storage-sdk"
+	storage "github.com/utopiophe/titan-storage-sdk"
 )
 
 func getTitanURLAndAPIKeyFromEnv() (string, string, error) {
