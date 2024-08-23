@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	neturl "net/url"
 	"time"
 )
 
@@ -212,9 +213,8 @@ type Webserver interface {
 	MoveAssetGroup(ctx context.Context, userID string, groupID, targetGroupID int) error
 	// GetAPPKeyPermissions get the permissions of user app key
 	GetAPPKeyPermissions(ctx context.Context, userID, keyName string) ([]string, error)
-
 	// GetNodeUploadInfo
-	GetNodeUploadInfo(ctx context.Context, userID string) (*UploadInfo, error)
+	GetNodeUploadInfo(ctx context.Context, userID string, urlMode bool) (*UploadInfo, error)
 }
 
 var _ Webserver = (*webserver)(nil)
@@ -314,10 +314,11 @@ func (s *webserver) LisgAreaIDs(ctx context.Context) ([]string, error) {
 
 // CreateUserAsset creates a new user asset.
 func (s *webserver) CreateAsset(ctx context.Context, caReq *CreateAssetReq) (*CreateAssetRsp, error) {
-	url := fmt.Sprintf("%s/api/v1/storage/create_asset?area_id=%s&asset_name=%s&asset_cid=%s&node_id=%s&asset_type=%s&asset_size=%d&group_id=%d",
-		s.url, caReq.AreaID, caReq.AssetName, caReq.AssetCID, caReq.NodeID, caReq.AssetType, caReq.AssetSize, caReq.GroupID)
-	fmt.Println("url: ", url)
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	uploadUrl := fmt.Sprintf("%s/api/v1/storage/create_asset?area_id=%s&asset_name=%s&asset_cid=%s&node_id=%s&asset_type=%s&asset_size=%d&group_id=%d",
+		s.url, caReq.AreaID, neturl.QueryEscape(caReq.AssetName), caReq.AssetCID, caReq.NodeID, caReq.AssetType, caReq.AssetSize, caReq.GroupID)
+
+	fmt.Println("url: ", uploadUrl)
+	req, err := http.NewRequestWithContext(ctx, "GET", uploadUrl, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -358,12 +359,13 @@ func (s *webserver) CreateAsset(ctx context.Context, caReq *CreateAssetReq) (*Cr
 		return nil, err
 	}
 	// fmt.Println("body ", string(body))
-	return &CreateAssetRsp{IsAlreadyExist: false, Endpoints: endpoints}, nil
+	return &CreateAssetRsp{IsAlreadyExist: len(endpoints) == 0, Endpoints: endpoints}, nil
 }
 
 // DeleteAsset deletes a user asset.
 func (s *webserver) DeleteAsset(ctx context.Context, userID, assetCID string) error {
 	url := fmt.Sprintf("%s/api/v1/storage/delete_asset?user_id=%s&asset_cid=%s", s.url, userID, assetCID)
+
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return err
@@ -660,8 +662,11 @@ func (s *webserver) GetAPPKeyPermissions(ctx context.Context, userID, keyName st
 }
 
 // GetNodeUploadInfo
-func (s *webserver) GetNodeUploadInfo(ctx context.Context, userID string) (*UploadInfo, error) {
+func (s *webserver) GetNodeUploadInfo(ctx context.Context, userID string, urlMode bool) (*UploadInfo, error) {
 	url := fmt.Sprintf("%s/api/v1/storage/get_upload_info?encrypted=false", s.url)
+	if urlMode {
+		url += "&urlMode=true"
+	}
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err

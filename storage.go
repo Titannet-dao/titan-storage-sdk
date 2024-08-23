@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -51,6 +52,10 @@ type Storage interface {
 	// UploadFileWithURL uploads a file from the specified URL to the titan storage.
 	// It returns the rootCID and the URL of the uploaded file, along with any error encountered.
 	UploadFileWithURL(ctx context.Context, url string, progress ProgressFunc) (string, string, error)
+
+	// UploadFileWithURLV2
+	UploadFileWithURLV2(ctx context.Context, url string, progress ProgressFunc) (string, string, error)
+
 	// UploadStream uploads data from an io.Reader stream to the titan storage.
 	// if name is empty, name will be the cid
 	// It returns the CID of the uploaded data and any error encountered.
@@ -152,7 +157,7 @@ func (s *storage) UploadFilesWithPath(ctx context.Context, filePath string, prog
 		return s.uploadFilesWithPathAndMakeCar(ctx, filePath, progress)
 	}
 
-	rsp, err := s.webAPI.GetNodeUploadInfo(ctx, s.userID)
+	rsp, err := s.webAPI.GetNodeUploadInfo(ctx, s.userID, false)
 	if err != nil {
 		return cid.Cid{}, err
 	}
@@ -282,6 +287,7 @@ func (s *storage) uploadFilesWithPathAndMakeCar(ctx context.Context, filePath st
 	for _, ep := range rsp.Endpoints {
 		_, err = s.uploadFileWithForm(ctx, carFile, fileName, ep.CandidateAddr, ep.Token, progress)
 		if err != nil {
+			fmt.Printf("upload req: %+v\n", ep)
 			if delErr := s.webAPI.DeleteAsset(ctx, s.userID, root.String()); delErr != nil {
 				return cid.Cid{}, fmt.Errorf("uploadFileWithForm failed %s, delete error %s", err.Error(), delErr.Error())
 			}
@@ -413,21 +419,33 @@ func (s *storage) UploadStream(ctx context.Context, r io.Reader, name string, pr
 	if err != nil {
 		return cid.Cid{}, fmt.Errorf("CreateAsset error %w", err)
 	}
-
+	// fmt.Printf("CreateAsset rsp %+v\n", rsp)
+	// for i, v := range rsp.Endpoints {
+	// 	fmt.Printf("endpoint[%d] %+v\n", i, v)
+	// }
 	if rsp.IsAlreadyExist {
 		return root, nil
 	}
 
-	for _, ep := range rsp.Endpoints {
+	c := len(rsp.Endpoints)
+	for i, ep := range rsp.Endpoints {
 		_, err = s.uploadFileWithForm(ctx, memFile, root.String(), ep.CandidateAddr, ep.Token, progress)
 		if err != nil {
+			// fmt.Printf("upload req: %+v\n", ep)
+			// return cid.Cid{}, fmt.Errorf("uploadFileWithForm error %s, delete it from titan", err.Error())
+			log.Printf("uploadFileWithForm error %s, delete it from titan\n", err.Error())
+		}
+		if err != nil && i+1 == c {
 			if delErr := s.webAPI.DeleteAsset(ctx, s.userID, root.String()); delErr != nil {
 				return cid.Cid{}, fmt.Errorf("uploadFileWithForm failed %s, delete error %s", err.Error(), delErr.Error())
 			}
-			return cid.Cid{}, fmt.Errorf("uploadFileWithForm error %s, delete it from titan", err.Error())
+			return cid.Cid{}, err
 		}
-		return root, nil
+		if err == nil {
+			return root, nil
+		}
 	}
+
 	return cid.Cid{}, fmt.Errorf("upload file failed")
 }
 
@@ -616,6 +634,23 @@ func (s *storage) UploadFileWithURL(ctx context.Context, url string, progress Pr
 	}
 
 	return rootCid.String(), res.URLs[0], nil
+}
+
+// UploadFileWithURLV2 uploads a url and let L1 to download it, returns
+func (s *storage) UploadFileWithURLV2(ctx context.Context, url string, progress ProgressFunc) (string, string, error) {
+
+	rsp, err := s.webAPI.GetNodeUploadInfo(ctx, s.userID, true)
+	if err != nil {
+		return "", "", err
+	}
+
+	nodes := rsp.List
+	if len(nodes) == 0 {
+		return "", "", fmt.Errorf("endpoints is empty")
+	}
+
+	return "", "", nil
+
 }
 
 // getFastNodes returns a list of fast nodes from the given candidates
