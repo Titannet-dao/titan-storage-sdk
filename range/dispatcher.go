@@ -25,7 +25,7 @@ type dispatcher struct {
 }
 
 type worker struct {
-	c *http.Client
+	// c *http.Client
 	e string
 }
 
@@ -182,7 +182,8 @@ func (d *dispatcher) fetch(ctx context.Context, w worker, j *job) ([]byte, error
 		return nil, errors.Errorf("new request failed: %v", err)
 	}
 	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", j.start, j.end))
-	resp, err := w.c.Do(req)
+	// resp, err := w.c.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, errors.Errorf("fetch failed: %v", err)
 	}

@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -34,9 +36,10 @@ const (
 )
 
 type UploadFileResult struct {
-	Code int    `json:"code"`
-	Msg  string `json:"msg"`
-	Cid  string `json:"cid"`
+	Code      int    `json:"code"`
+	Msg       string `json:"msg"`
+	Cid       string `json:"cid"`
+	totalSize int64
 }
 
 // ProgressFunc is a function type for reporting progress during file uploads
@@ -51,10 +54,16 @@ type Storage interface {
 	// UploadFileWithURL uploads a file from the specified URL to the titan storage.
 	// It returns the rootCID and the URL of the uploaded file, along with any error encountered.
 	UploadFileWithURL(ctx context.Context, url string, progress ProgressFunc) (string, string, error)
+
+	// UploadFileWithURLV2
+	UploadFileWithURLV2(ctx context.Context, url string, progress ProgressFunc) (string, string, error)
+
 	// UploadStream uploads data from an io.Reader stream to the titan storage.
 	// if name is empty, name will be the cid
 	// It returns the CID of the uploaded data and any error encountered.
 	UploadStream(ctx context.Context, r io.Reader, name string, progress ProgressFunc) (cid.Cid, error)
+	// UploadStreamV2 uploads data from an io.Reader stream without making car to the titan storage.
+	UploadStreamV2(ctx context.Context, r io.Reader, name string, progress ProgressFunc) (cid.Cid, error)
 	// ListUserAssets retrieves a list of user assets from the titan storage.
 	// It takes limit and offset parameters for pagination and returns the asset list and any error encountered.
 	ListUserAssets(ctx context.Context, parent, pageSize, page int) (*client.ListAssetRecordRsp, error)
@@ -117,7 +126,7 @@ func NewStorage(cfg *Config) (Storage, error) {
 	// headers := http.Header{}
 	// headers.Add("Authorization", "Bearer "+cfg.APIKey)
 
-	webAPI := client.NewWebserver(cfg.TitanURL, cfg.APIKey)
+	webAPI := client.NewWebserver(cfg.TitanURL, cfg.APIKey, cfg.AreaID)
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -143,7 +152,7 @@ func NewStorage(cfg *Config) (Storage, error) {
 		}
 
 	}
-	return &storage{webAPI: webAPI, candidateID: fastNodeID, userID: vipInfo.UserID, groupID: 0, areaID: cfg.AreaID}, nil
+	return &storage{webAPI: webAPI, candidateID: fastNodeID, userID: vipInfo.UserID, groupID: cfg.GroupID, areaID: cfg.AreaID}, nil
 }
 
 // UploadFilesWithPath uploads files from the specified path
@@ -152,7 +161,7 @@ func (s *storage) UploadFilesWithPath(ctx context.Context, filePath string, prog
 		return s.uploadFilesWithPathAndMakeCar(ctx, filePath, progress)
 	}
 
-	rsp, err := s.webAPI.GetNodeUploadInfo(ctx, s.userID)
+	rsp, err := s.webAPI.GetNodeUploadInfo(ctx, s.userID, false)
 	if err != nil {
 		return cid.Cid{}, err
 	}
@@ -282,6 +291,7 @@ func (s *storage) uploadFilesWithPathAndMakeCar(ctx context.Context, filePath st
 	for _, ep := range rsp.Endpoints {
 		_, err = s.uploadFileWithForm(ctx, carFile, fileName, ep.CandidateAddr, ep.Token, progress)
 		if err != nil {
+			fmt.Printf("upload req: %+v\n", ep)
 			if delErr := s.webAPI.DeleteAsset(ctx, s.userID, root.String()); delErr != nil {
 				return cid.Cid{}, fmt.Errorf("uploadFileWithForm failed %s, delete error %s", err.Error(), delErr.Error())
 			}
@@ -359,13 +369,16 @@ func (s *storage) uploadFileWithForm(ctx context.Context, r io.Reader, name, upl
 
 	var ret UploadFileResult
 	if err := json.Unmarshal(b, &ret); err != nil {
+		log.Printf("Upload file to L1 node error, url %s, name %s, error: %s \n", uploadURL, name, err.Error())
 		return nil, err
 	}
 
 	if ret.Code != 0 {
+		log.Printf("Upload file to L1 node error, url %s, name %s, ret: %+v \n", uploadURL, name, ret)
 		return nil, fmt.Errorf(ret.Msg)
 	}
 
+	ret.totalSize = int64(totalSize)
 	return &ret, nil
 }
 
@@ -413,22 +426,164 @@ func (s *storage) UploadStream(ctx context.Context, r io.Reader, name string, pr
 	if err != nil {
 		return cid.Cid{}, fmt.Errorf("CreateAsset error %w", err)
 	}
-
+	// fmt.Printf("CreateAsset rsp %+v\n", rsp)
+	// for i, v := range rsp.Endpoints {
+	// 	fmt.Printf("endpoint[%d] %+v\n", i, v)
+	// }
 	if rsp.IsAlreadyExist {
 		return root, nil
 	}
 
-	for _, ep := range rsp.Endpoints {
+	c := len(rsp.Endpoints)
+	for i, ep := range rsp.Endpoints {
 		_, err = s.uploadFileWithForm(ctx, memFile, root.String(), ep.CandidateAddr, ep.Token, progress)
 		if err != nil {
+			// fmt.Printf("upload req: %+v\n", ep)
+			// return cid.Cid{}, fmt.Errorf("uploadFileWithForm error %s, delete it from titan", err.Error())
+			log.Printf("uploadFileWithForm error %s, delete it from titan\n", err.Error())
+		}
+		if err != nil && i+1 == c {
 			if delErr := s.webAPI.DeleteAsset(ctx, s.userID, root.String()); delErr != nil {
 				return cid.Cid{}, fmt.Errorf("uploadFileWithForm failed %s, delete error %s", err.Error(), delErr.Error())
 			}
-			return cid.Cid{}, fmt.Errorf("uploadFileWithForm error %s, delete it from titan", err.Error())
+			return cid.Cid{}, err
 		}
-		return root, nil
+		if err == nil {
+			return root, nil
+		}
 	}
+
 	return cid.Cid{}, fmt.Errorf("upload file failed")
+}
+
+// UploadStreamV2 uploads data from an io.Reader stream without making car to the titan storage.
+func (s *storage) UploadStreamV2(ctx context.Context, r io.Reader, name string, progress ProgressFunc) (cid.Cid, error) {
+	rsp, err := s.webAPI.GetNodeUploadInfo(ctx, s.userID, false)
+	if err != nil {
+		return cid.Cid{}, err
+	}
+
+	if rsp.AlreadyExists {
+		return cid.Cid{}, fmt.Errorf("file already exists")
+	}
+
+	if len(rsp.List) == 0 {
+		return cid.Cid{}, fmt.Errorf("endpoints is empty")
+	}
+
+	// var size int64
+
+	// if f, ok := r.(*os.File); ok {
+	// 	if stat, err := f.Stat(); err != nil {
+	// 		return cid.Cid{}, fmt.Errorf("read file failed")
+	// 	} else {
+	// 		size = stat.Size()
+	// 	}
+	// }
+
+	// if seeker, ok := r.(io.Seeker); ok {
+	// 	currentPos, err := seeker.Seek(0, io.SeekCurrent)
+	// 	if err != nil {
+	// 		return cid.Cid{}, fmt.Errorf("seek content failed")
+	// 	}
+	// 	size, err = seeker.Seek(0, io.SeekEnd)
+	// 	if err != nil {
+	// 		return cid.Cid{}, fmt.Errorf("seek content failed")
+	// 	}
+	// 	_, err = seeker.Seek(currentPos, io.SeekStart)
+	// 	if err != nil {
+	// 		return cid.Cid{}, fmt.Errorf("return position failed")
+	// 	}
+	// }
+
+	// if br, ok := r.(*bytes.Reader); ok {
+	// 	size = int64(br.Len())
+	// }
+
+	// if sr, ok := r.(*strings.Reader); ok {
+	// 	size = int64(sr.Len())
+	// }
+
+	// f, err := os.Open(filePath)
+	// if err != nil {
+	// 	return cid.Cid{}, err
+	// }
+	// defer f.Close()
+
+	// node := rsp.List[0]
+
+	var (
+		ret    *UploadFileResult
+		root   cid.Cid
+		nodeId string
+	)
+
+	body := &bytes.Buffer{}
+	writer := io.MultiWriter(body)
+	io.Copy(writer, r)
+	cnt := body.Bytes()
+
+	for _, node := range rsp.List {
+		nodeId = node.NodeID
+
+		nr := bytes.NewReader(cnt)
+
+		ret, err = s.uploadFileWithForm(ctx, nr, name, node.UploadURL, node.Token, progress)
+		if err != nil {
+			err = fmt.Errorf("upload file with form failed, error: %s", err.Error())
+			log.Println(err)
+			continue
+		}
+
+		if ret.Code != 0 {
+			err = fmt.Errorf("upload file with form failed, ret: %+v", ret)
+			log.Println(err)
+			continue
+		}
+
+		root, err = cid.Decode(ret.Cid)
+		if err != nil {
+			err = fmt.Errorf("decode cid %s failed, reason: %s", ret.Cid, err.Error())
+			log.Println(err)
+			continue
+		}
+
+		break
+	}
+
+	if err != nil {
+		return cid.Cid{}, err
+	}
+
+	// fileType, err := getFileType(name)
+	// if err != nil {
+	// 	return cid.Cid{}, err
+	// }
+
+	// fileInfo, err := f.Stat()
+	// if err != nil {
+	// 	return cid.Cid{}, err
+	// }
+
+	log.Printf("f name %s, fileType name %s \n", name, "file")
+
+	assetProperty := client.AssetProperty{
+		AssetCID:  ret.Cid,
+		AssetName: name,
+		AssetSize: ret.totalSize,
+		AssetType: "file",
+		NodeID:    nodeId,
+		GroupID:   s.groupID,
+	}
+
+	req := client.CreateAssetReq{AssetProperty: assetProperty, AreaID: s.areaID}
+	_, err = s.webAPI.CreateAsset(context.Background(), &req)
+	if err != nil {
+		return cid.Cid{}, fmt.Errorf("CreateAsset error %w", err)
+	}
+
+	return root, nil
+
 }
 
 // GetFileWithCid gets a single file by rootCID
@@ -555,15 +710,23 @@ func errAssetNotExist(cid string) error {
 // GetURL gets the URL of the file
 func (s *storage) GetURL(ctx context.Context, rootCID string) (*client.ShareAssetResult, error) {
 	// 100 ms
-	var interval = 100
+	var interval = 1000
 	var startTime = time.Now()
-	var timeout = time.Minute
+	var timeout = 15 * time.Second
 	for {
+		time.Sleep(time.Millisecond * time.Duration(interval))
+
+		if time.Since(startTime) > timeout {
+			return nil, fmt.Errorf("time out of %ds, can not find asset exist", timeout/time.Second)
+		}
+
 		result, err := s.webAPI.ShareAsset(ctx, s.userID, "", rootCID)
 		if err != nil {
-			if err.Error() != errAssetNotExist(rootCID).Error() {
-				return nil, fmt.Errorf("ShareUserAssets %w", err)
-			}
+			log.Printf("ShareUserAsset %v, cid: %s \n", err.Error(), rootCID)
+			// if err.Error() != errAssetNotExist(rootCID).Error() {
+			// 	return nil, fmt.Errorf("ShareUserAssets %w", err)
+			// }
+			continue
 		}
 
 		if len(result.URLs) > 0 {
@@ -580,18 +743,15 @@ func (s *storage) GetURL(ctx context.Context, rootCID string) (*client.ShareAsse
 			return result, nil
 		}
 
-		if time.Since(startTime) > timeout {
-			return nil, fmt.Errorf("time out of %ds, can not find asset exist", timeout/time.Second)
-		}
-
-		time.Sleep(time.Millisecond * time.Duration(interval))
 	}
 }
 
 // UploadFileWithURL uploads a file from the specified URL
 func (s *storage) UploadFileWithURL(ctx context.Context, url string, progress ProgressFunc) (string, string, error) {
+	log.Println("UploadFileWithURL link:", url)
 	rsp, err := http.Get(url)
 	if err != nil {
+		log.Printf("http.Get(%s) error: %s \n", url, err)
 		return "", "", err
 	}
 	defer rsp.Body.Close()
@@ -605,17 +765,45 @@ func (s *storage) UploadFileWithURL(ctx context.Context, url string, progress Pr
 		fmt.Println("getFileNameFromURL ", err.Error())
 	}
 
-	rootCid, err := s.UploadStream(ctx, rsp.Body, filename, progress)
+	rootCid, err := s.UploadStreamV2(ctx, rsp.Body, filename, progress)
 	if err != nil {
 		return "", "", err
 	}
 
-	res, err := s.GetURL(ctx, rootCid.String())
-	if err != nil {
+	// try 5 times to fetch url , otherwise return error
+	var res *client.ShareAssetResult
+	for i := 0; i < 1; i++ {
+		time.Sleep(time.Second * 1)
+		res, err = s.GetURL(ctx, rootCid.String())
+		if err != nil {
+			log.Printf("get url err: %s\n", err.Error())
+			continue
+		}
+		break
+	}
+
+	if res == nil {
 		return "", "", err
 	}
 
 	return rootCid.String(), res.URLs[0], nil
+}
+
+// UploadFileWithURLV2 uploads a url and let L1 to download it, returns
+func (s *storage) UploadFileWithURLV2(ctx context.Context, url string, progress ProgressFunc) (string, string, error) {
+
+	rsp, err := s.webAPI.GetNodeUploadInfo(ctx, s.userID, true)
+	if err != nil {
+		return "", "", err
+	}
+
+	nodes := rsp.List
+	if len(nodes) == 0 {
+		return "", "", fmt.Errorf("endpoints is empty")
+	}
+
+	return "", "", nil
+
 }
 
 // getFastNodes returns a list of fast nodes from the given candidates
@@ -677,16 +865,24 @@ func getFileNameFromURL(rawURL string) (string, error) {
 
 	// special for chatgpt
 	rscd := u.Query().Get("rscd")
-	vs := strings.Split(rscd, ";")
-	if len(vs) < 1 {
-		return "", fmt.Errorf("can not find filename")
+	if len(rscd) > 0 {
+		re := regexp.MustCompile(`filename="([^"]+)"`)
+		matches := re.FindStringSubmatch(rscd)
+		if len(matches) > 1 {
+			return matches[1], nil
+		}
 	}
 
-	filename = vs[1]
-	filename = strings.TrimSpace(filename)
-	filename = strings.TrimPrefix(filename, "filename=")
+	// vs := strings.Split(rscd, ";")
+	// if len(vs) < 1 {
+	// 	return "", fmt.Errorf("can not find filename")
+	// }
 
-	return filename, nil
+	// filename = vs[1]
+	// filename = strings.TrimSpace(filename)
+	// filename = strings.TrimPrefix(filename, "filename=")
+
+	return path.Base(u.Path), nil
 }
 
 func replaceNodeIDToCID(urlString string, cid string) string {

@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -149,6 +150,8 @@ type ListAssetSummaryRsp struct {
 type UploadInfo struct {
 	List          []*NodeUploadInfo
 	AlreadyExists bool
+	AreaID        string
+	Log           string
 }
 
 type NodeUploadInfo struct {
@@ -212,22 +215,22 @@ type Webserver interface {
 	MoveAssetGroup(ctx context.Context, userID string, groupID, targetGroupID int) error
 	// GetAPPKeyPermissions get the permissions of user app key
 	GetAPPKeyPermissions(ctx context.Context, userID, keyName string) ([]string, error)
-
 	// GetNodeUploadInfo
-	GetNodeUploadInfo(ctx context.Context, userID string) (*UploadInfo, error)
+	GetNodeUploadInfo(ctx context.Context, userID string, urlMode bool) (*UploadInfo, error)
 }
 
 var _ Webserver = (*webserver)(nil)
 
 // NewWebserver creates a new Scheduler instance with the specified URL, headers, and options.
-func NewWebserver(url string, apiKey string) Webserver {
-	return &webserver{url: url, apiKey: apiKey, client: http.DefaultClient}
+func NewWebserver(url string, apiKey string, area string) Webserver {
+	return &webserver{url: url, apiKey: apiKey, client: http.DefaultClient, area: area}
 }
 
 type webserver struct {
 	// client *Client
 	url    string
 	apiKey string
+	area   string
 	client *http.Client
 }
 
@@ -312,16 +315,45 @@ func (s *webserver) LisgAreaIDs(ctx context.Context) ([]string, error) {
 	return nil, nil
 }
 
+type webCreateAssetReq struct {
+	AssetName string   `json:"asset_name"`
+	AssetCID  string   `json:"asset_cid"`
+	AreaID    []string `json:"area_id"`
+	NodeID    string   `json:"node_id"`
+	AssetType string   `json:"asset_type"`
+	AssetSize int64    `json:"asset_size"`
+	GroupID   int64    `json:"group_id"`
+	Encrypted bool     `json:"encrypted"`
+}
+
 // CreateUserAsset creates a new user asset.
 func (s *webserver) CreateAsset(ctx context.Context, caReq *CreateAssetReq) (*CreateAssetRsp, error) {
-	url := fmt.Sprintf("%s/api/v1/storage/create_asset?area_id=%s&asset_name=%s&asset_cid=%s&node_id=%s&asset_type=%s&asset_size=%d&group_id=%d",
-		s.url, caReq.AreaID, caReq.AssetName, caReq.AssetCID, caReq.NodeID, caReq.AssetType, caReq.AssetSize, caReq.GroupID)
-	fmt.Println("url: ", url)
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	uploadUrl := fmt.Sprintf("%s/api/v1/storage/create_asset", s.url)
+	// uploadUrl := fmt.Sprintf("%s/api/v1/storage/create_asset?area_id=%s&asset_name=%s&asset_cid=%s&node_id=%s&asset_type=%s&asset_size=%d&group_id=%d",
+	// 	s.url, caReq.AreaID, neturl.QueryEscape(caReq.AssetName), caReq.AssetCID, caReq.NodeID, caReq.AssetType, caReq.AssetSize, caReq.GroupID)
+
+	postData := webCreateAssetReq{
+		AssetName: caReq.AssetName,
+		AssetCID:  caReq.AssetCID,
+		AreaID:    []string{caReq.AreaID},
+		NodeID:    caReq.NodeID,
+		AssetType: caReq.AssetType,
+		AssetSize: caReq.AssetSize,
+		GroupID:   int64(caReq.GroupID),
+	}
+
+	jsonBytes, err := json.Marshal(postData)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println("url: ", uploadUrl, "data: ", string(jsonBytes))
+
+	req, err := http.NewRequestWithContext(ctx, "POST", uploadUrl, bytes.NewBuffer(jsonBytes))
 	if err != nil {
 		return nil, err
 	}
 
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("apikey", s.apiKey)
 
 	rsp, err := s.client.Do(req)
@@ -358,12 +390,13 @@ func (s *webserver) CreateAsset(ctx context.Context, caReq *CreateAssetReq) (*Cr
 		return nil, err
 	}
 	// fmt.Println("body ", string(body))
-	return &CreateAssetRsp{IsAlreadyExist: false, Endpoints: endpoints}, nil
+	return &CreateAssetRsp{IsAlreadyExist: len(endpoints) == 0, Endpoints: endpoints}, nil
 }
 
 // DeleteAsset deletes a user asset.
 func (s *webserver) DeleteAsset(ctx context.Context, userID, assetCID string) error {
 	url := fmt.Sprintf("%s/api/v1/storage/delete_asset?user_id=%s&asset_cid=%s", s.url, userID, assetCID)
+
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return err
@@ -660,8 +693,14 @@ func (s *webserver) GetAPPKeyPermissions(ctx context.Context, userID, keyName st
 }
 
 // GetNodeUploadInfo
-func (s *webserver) GetNodeUploadInfo(ctx context.Context, userID string) (*UploadInfo, error) {
-	url := fmt.Sprintf("%s/api/v1/storage/get_upload_info?encrypted=false", s.url)
+func (s *webserver) GetNodeUploadInfo(ctx context.Context, userID string, urlMode bool) (*UploadInfo, error) {
+	url := fmt.Sprintf("%s/api/v1/storage/get_upload_info?encrypted=false&area_id=%s", s.url, s.area)
+	if urlMode {
+		url += "&urlMode=true"
+	}
+
+	fmt.Println("GetUploadInfo url: ", url)
+
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
