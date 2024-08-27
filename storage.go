@@ -13,6 +13,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -712,16 +713,24 @@ func getFileNameFromURL(rawURL string) (string, error) {
 
 	// special for chatgpt
 	rscd := u.Query().Get("rscd")
-	vs := strings.Split(rscd, ";")
-	if len(vs) < 1 {
-		return "", fmt.Errorf("can not find filename")
+	if len(rscd) > 0 {
+		re := regexp.MustCompile(`filename="([^"]+)"`)
+		matches := re.FindStringSubmatch(rscd)
+		if len(matches) > 1 {
+			return matches[1], nil
+		}
 	}
 
-	filename = vs[1]
-	filename = strings.TrimSpace(filename)
-	filename = strings.TrimPrefix(filename, "filename=")
+	// vs := strings.Split(rscd, ";")
+	// if len(vs) < 1 {
+	// 	return "", fmt.Errorf("can not find filename")
+	// }
 
-	return filename, nil
+	// filename = vs[1]
+	// filename = strings.TrimSpace(filename)
+	// filename = strings.TrimPrefix(filename, "filename=")
+
+	return path.Base(u.Path), nil
 }
 
 func replaceNodeIDToCID(urlString string, cid string) string {
