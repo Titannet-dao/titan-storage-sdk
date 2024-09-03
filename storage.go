@@ -524,23 +524,23 @@ func (s *storage) UploadStreamV2(ctx context.Context, r io.Reader, name string, 
 		return cid.Cid{}, fmt.Errorf("decode cid %s failed, %s", ret.Cid, err.Error())
 	}
 
-	fileType, err := getFileType(name)
-	if err != nil {
-		return cid.Cid{}, err
-	}
+	// fileType, err := getFileType(name)
+	// if err != nil {
+	// 	return cid.Cid{}, err
+	// }
 
 	// fileInfo, err := f.Stat()
 	// if err != nil {
 	// 	return cid.Cid{}, err
 	// }
 
-	fmt.Printf("f name %s, fileType name %s", name, fileType)
+	fmt.Printf("f name %s, fileType name %s", name, "file")
 
 	assetProperty := client.AssetProperty{
 		AssetCID:  ret.Cid,
 		AssetName: name,
 		AssetSize: ret.totalSize,
-		AssetType: fileType,
+		AssetType: "file",
 		NodeID:    node.NodeID,
 		GroupID:   s.groupID,
 	}
