@@ -36,9 +36,10 @@ const (
 )
 
 type UploadFileResult struct {
-	Code int    `json:"code"`
-	Msg  string `json:"msg"`
-	Cid  string `json:"cid"`
+	Code      int    `json:"code"`
+	Msg       string `json:"msg"`
+	Cid       string `json:"cid"`
+	totalSize int64
 }
 
 // ProgressFunc is a function type for reporting progress during file uploads
@@ -61,6 +62,8 @@ type Storage interface {
 	// if name is empty, name will be the cid
 	// It returns the CID of the uploaded data and any error encountered.
 	UploadStream(ctx context.Context, r io.Reader, name string, progress ProgressFunc) (cid.Cid, error)
+	// UploadStreamV2 uploads data from an io.Reader stream without making car to the titan storage.
+	UploadStreamV2(ctx context.Context, r io.Reader, name string, progress ProgressFunc) (cid.Cid, error)
 	// ListUserAssets retrieves a list of user assets from the titan storage.
 	// It takes limit and offset parameters for pagination and returns the asset list and any error encountered.
 	ListUserAssets(ctx context.Context, parent, pageSize, page int) (*client.ListAssetRecordRsp, error)
@@ -373,6 +376,7 @@ func (s *storage) uploadFileWithForm(ctx context.Context, r io.Reader, name, upl
 		return nil, fmt.Errorf(ret.Msg)
 	}
 
+	ret.totalSize = int64(totalSize)
 	return &ret, nil
 }
 
@@ -448,6 +452,107 @@ func (s *storage) UploadStream(ctx context.Context, r io.Reader, name string, pr
 	}
 
 	return cid.Cid{}, fmt.Errorf("upload file failed")
+}
+
+// UploadStreamV2 uploads data from an io.Reader stream without making car to the titan storage.
+func (s *storage) UploadStreamV2(ctx context.Context, r io.Reader, name string, progress ProgressFunc) (cid.Cid, error) {
+	rsp, err := s.webAPI.GetNodeUploadInfo(ctx, s.userID, false)
+	if err != nil {
+		return cid.Cid{}, err
+	}
+
+	if rsp.AlreadyExists {
+		return cid.Cid{}, fmt.Errorf("file already exists")
+	}
+
+	if len(rsp.List) == 0 {
+		return cid.Cid{}, fmt.Errorf("endpoints is empty")
+	}
+
+	// var size int64
+
+	// if f, ok := r.(*os.File); ok {
+	// 	if stat, err := f.Stat(); err != nil {
+	// 		return cid.Cid{}, fmt.Errorf("read file failed")
+	// 	} else {
+	// 		size = stat.Size()
+	// 	}
+	// }
+
+	// if seeker, ok := r.(io.Seeker); ok {
+	// 	currentPos, err := seeker.Seek(0, io.SeekCurrent)
+	// 	if err != nil {
+	// 		return cid.Cid{}, fmt.Errorf("seek content failed")
+	// 	}
+	// 	size, err = seeker.Seek(0, io.SeekEnd)
+	// 	if err != nil {
+	// 		return cid.Cid{}, fmt.Errorf("seek content failed")
+	// 	}
+	// 	_, err = seeker.Seek(currentPos, io.SeekStart)
+	// 	if err != nil {
+	// 		return cid.Cid{}, fmt.Errorf("return position failed")
+	// 	}
+	// }
+
+	// if br, ok := r.(*bytes.Reader); ok {
+	// 	size = int64(br.Len())
+	// }
+
+	// if sr, ok := r.(*strings.Reader); ok {
+	// 	size = int64(sr.Len())
+	// }
+
+	// f, err := os.Open(filePath)
+	// if err != nil {
+	// 	return cid.Cid{}, err
+	// }
+	// defer f.Close()
+
+	node := rsp.List[0]
+
+	ret, err := s.uploadFileWithForm(ctx, r, name, node.UploadURL, node.Token, progress)
+	if err != nil {
+		return cid.Cid{}, fmt.Errorf("upload file with form failed, %s", err.Error())
+	}
+
+	if ret.Code != 0 {
+		return cid.Cid{}, fmt.Errorf("upload file with form failed, %s", ret.Msg)
+	}
+
+	root, err := cid.Decode(ret.Cid)
+	if err != nil {
+		return cid.Cid{}, fmt.Errorf("decode cid %s failed, %s", ret.Cid, err.Error())
+	}
+
+	fileType, err := getFileType(name)
+	if err != nil {
+		return cid.Cid{}, err
+	}
+
+	// fileInfo, err := f.Stat()
+	// if err != nil {
+	// 	return cid.Cid{}, err
+	// }
+
+	fmt.Printf("f name %s, fileType name %s", name, fileType)
+
+	assetProperty := client.AssetProperty{
+		AssetCID:  ret.Cid,
+		AssetName: name,
+		AssetSize: ret.totalSize,
+		AssetType: fileType,
+		NodeID:    node.NodeID,
+		GroupID:   s.groupID,
+	}
+
+	req := client.CreateAssetReq{AssetProperty: assetProperty, AreaID: s.areaID}
+	_, err = s.webAPI.CreateAsset(context.Background(), &req)
+	if err != nil {
+		return cid.Cid{}, fmt.Errorf("CreateAsset error %w", err)
+	}
+
+	return root, nil
+
 }
 
 // GetFileWithCid gets a single file by rootCID
