@@ -695,6 +695,9 @@ func (s *webserver) GetNodeUploadInfo(ctx context.Context, userID string, urlMod
 	if urlMode {
 		url += "&urlMode=true"
 	}
+
+	fmt.Println("GetUploadInfo url: ", url)
+
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
