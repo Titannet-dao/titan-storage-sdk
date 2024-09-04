@@ -1,13 +1,13 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
-	neturl "net/url"
 	"time"
 )
 
@@ -220,14 +220,15 @@ type Webserver interface {
 var _ Webserver = (*webserver)(nil)
 
 // NewWebserver creates a new Scheduler instance with the specified URL, headers, and options.
-func NewWebserver(url string, apiKey string) Webserver {
-	return &webserver{url: url, apiKey: apiKey, client: http.DefaultClient}
+func NewWebserver(url string, apiKey string, area string) Webserver {
+	return &webserver{url: url, apiKey: apiKey, client: http.DefaultClient, area: area}
 }
 
 type webserver struct {
 	// client *Client
 	url    string
 	apiKey string
+	area   string
 	client *http.Client
 }
 
@@ -312,17 +313,44 @@ func (s *webserver) LisgAreaIDs(ctx context.Context) ([]string, error) {
 	return nil, nil
 }
 
+type webCreateAssetReq struct {
+	AssetName string   `json:"asset_name"`
+	AssetCID  string   `json:"asset_cid"`
+	AreaID    []string `json:"area_id"`
+	NodeID    string   `json:"node_id"`
+	AssetType string   `json:"asset_type"`
+	AssetSize int64    `json:"asset_size"`
+	GroupID   int64    `json:"group_id"`
+	Encrypted bool     `json:"encrypted"`
+}
+
 // CreateUserAsset creates a new user asset.
 func (s *webserver) CreateAsset(ctx context.Context, caReq *CreateAssetReq) (*CreateAssetRsp, error) {
-	uploadUrl := fmt.Sprintf("%s/api/v1/storage/create_asset?area_id=%s&asset_name=%s&asset_cid=%s&node_id=%s&asset_type=%s&asset_size=%d&group_id=%d",
-		s.url, caReq.AreaID, neturl.QueryEscape(caReq.AssetName), caReq.AssetCID, caReq.NodeID, caReq.AssetType, caReq.AssetSize, caReq.GroupID)
+	uploadUrl := fmt.Sprintf("%s/api/v1/storage/create_asset", s.url)
+	// uploadUrl := fmt.Sprintf("%s/api/v1/storage/create_asset?area_id=%s&asset_name=%s&asset_cid=%s&node_id=%s&asset_type=%s&asset_size=%d&group_id=%d",
+	// 	s.url, caReq.AreaID, neturl.QueryEscape(caReq.AssetName), caReq.AssetCID, caReq.NodeID, caReq.AssetType, caReq.AssetSize, caReq.GroupID)
 
-	fmt.Println("url: ", uploadUrl)
-	req, err := http.NewRequestWithContext(ctx, "GET", uploadUrl, nil)
+	postData := webCreateAssetReq{
+		AssetName: caReq.AssetName,
+		AssetCID:  caReq.AssetCID,
+		AreaID:    []string{caReq.AreaID},
+		NodeID:    caReq.NodeID,
+		AssetType: caReq.AssetType,
+		AssetSize: caReq.AssetSize,
+	}
+
+	jsonBytes, err := json.Marshal(postData)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println("url: ", uploadUrl, "data: ", string(jsonBytes))
+
+	req, err := http.NewRequestWithContext(ctx, "POST", uploadUrl, bytes.NewBuffer(jsonBytes))
 	if err != nil {
 		return nil, err
 	}
 
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("apikey", s.apiKey)
 
 	rsp, err := s.client.Do(req)
@@ -663,7 +691,7 @@ func (s *webserver) GetAPPKeyPermissions(ctx context.Context, userID, keyName st
 
 // GetNodeUploadInfo
 func (s *webserver) GetNodeUploadInfo(ctx context.Context, userID string, urlMode bool) (*UploadInfo, error) {
-	url := fmt.Sprintf("%s/api/v1/storage/get_upload_info?encrypted=false", s.url)
+	url := fmt.Sprintf("%s/api/v1/storage/get_upload_info?encrypted=false&area_id=%s", s.url, s.area)
 	if urlMode {
 		url += "&urlMode=true"
 	}

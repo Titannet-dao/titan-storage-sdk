@@ -126,7 +126,7 @@ func NewStorage(cfg *Config) (Storage, error) {
 	// headers := http.Header{}
 	// headers.Add("Authorization", "Bearer "+cfg.APIKey)
 
-	webAPI := client.NewWebserver(cfg.TitanURL, cfg.APIKey)
+	webAPI := client.NewWebserver(cfg.TitanURL, cfg.APIKey, cfg.AreaID)
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
