@@ -152,7 +152,7 @@ func NewStorage(cfg *Config) (Storage, error) {
 		}
 
 	}
-	return &storage{webAPI: webAPI, candidateID: fastNodeID, userID: vipInfo.UserID, groupID: 0, areaID: cfg.AreaID}, nil
+	return &storage{webAPI: webAPI, candidateID: fastNodeID, userID: vipInfo.UserID, groupID: cfg.GroupID, areaID: cfg.AreaID}, nil
 }
 
 // UploadFilesWithPath uploads files from the specified path
