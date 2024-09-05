@@ -734,8 +734,19 @@ func (s *storage) UploadFileWithURL(ctx context.Context, url string, progress Pr
 		return "", "", err
 	}
 
-	res, err := s.GetURL(ctx, rootCid.String())
-	if err != nil {
+	// try 5 times to fetch url , otherwise return error
+	var res *client.ShareAssetResult
+	for i := 0; i < 5; i++ {
+		time.Sleep(time.Second * 1)
+		res, err = s.GetURL(ctx, rootCid.String())
+		if err != nil {
+			log.Printf("get url err: %s\n", err.Error())
+			continue
+		}
+		break
+	}
+
+	if res == nil {
 		return "", "", err
 	}
 
