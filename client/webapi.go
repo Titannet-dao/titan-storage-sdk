@@ -337,6 +337,7 @@ func (s *webserver) CreateAsset(ctx context.Context, caReq *CreateAssetReq) (*Cr
 		NodeID:    caReq.NodeID,
 		AssetType: caReq.AssetType,
 		AssetSize: caReq.AssetSize,
+		GroupID:   int64(caReq.GroupID),
 	}
 
 	jsonBytes, err := json.Marshal(postData)

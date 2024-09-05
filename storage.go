@@ -729,7 +729,7 @@ func (s *storage) UploadFileWithURL(ctx context.Context, url string, progress Pr
 		fmt.Println("getFileNameFromURL ", err.Error())
 	}
 
-	rootCid, err := s.UploadStream(ctx, rsp.Body, filename, progress)
+	rootCid, err := s.UploadStreamV2(ctx, rsp.Body, filename, progress)
 	if err != nil {
 		return "", "", err
 	}
