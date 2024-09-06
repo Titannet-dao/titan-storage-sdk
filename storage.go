@@ -702,7 +702,7 @@ func errAssetNotExist(cid string) error {
 // GetURL gets the URL of the file
 func (s *storage) GetURL(ctx context.Context, rootCID string) (*client.ShareAssetResult, error) {
 	// 100 ms
-	var interval = 100
+	var interval = 1000
 	var startTime = time.Now()
 	var timeout = 15 * time.Second
 	for {
@@ -714,7 +714,7 @@ func (s *storage) GetURL(ctx context.Context, rootCID string) (*client.ShareAsse
 
 		result, err := s.webAPI.ShareAsset(ctx, s.userID, "", rootCID)
 		if err != nil {
-			log.Printf("ShareUserAsset %v \n", err.Error())
+			log.Printf("ShareUserAsset %v, cid: %s \n", err.Error(), rootCID)
 			// if err.Error() != errAssetNotExist(rootCID).Error() {
 			// 	return nil, fmt.Errorf("ShareUserAssets %w", err)
 			// }
@@ -762,7 +762,7 @@ func (s *storage) UploadFileWithURL(ctx context.Context, url string, progress Pr
 
 	// try 5 times to fetch url , otherwise return error
 	var res *client.ShareAssetResult
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 1; i++ {
 		time.Sleep(time.Second * 1)
 		res, err = s.GetURL(ctx, rootCid.String())
 		if err != nil {
