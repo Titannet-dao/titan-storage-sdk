@@ -704,13 +704,21 @@ func (s *storage) GetURL(ctx context.Context, rootCID string) (*client.ShareAsse
 	// 100 ms
 	var interval = 100
 	var startTime = time.Now()
-	var timeout = time.Minute
+	var timeout = 15 * time.Second
 	for {
+		time.Sleep(time.Millisecond * time.Duration(interval))
+
+		if time.Since(startTime) > timeout {
+			return nil, fmt.Errorf("time out of %ds, can not find asset exist", timeout/time.Second)
+		}
+
 		result, err := s.webAPI.ShareAsset(ctx, s.userID, "", rootCID)
 		if err != nil {
-			if err.Error() != errAssetNotExist(rootCID).Error() {
-				return nil, fmt.Errorf("ShareUserAssets %w", err)
-			}
+			log.Printf("ShareUserAsset %v \n", err.Error())
+			// if err.Error() != errAssetNotExist(rootCID).Error() {
+			// 	return nil, fmt.Errorf("ShareUserAssets %w", err)
+			// }
+			continue
 		}
 
 		if len(result.URLs) > 0 {
@@ -727,11 +735,6 @@ func (s *storage) GetURL(ctx context.Context, rootCID string) (*client.ShareAsse
 			return result, nil
 		}
 
-		if time.Since(startTime) > timeout {
-			return nil, fmt.Errorf("time out of %ds, can not find asset exist", timeout/time.Second)
-		}
-
-		time.Sleep(time.Millisecond * time.Duration(interval))
 	}
 }
 
