@@ -518,9 +518,17 @@ func (s *storage) UploadStreamV2(ctx context.Context, r io.Reader, name string, 
 		nodeId string
 	)
 
+	body := &bytes.Buffer{}
+	writer := io.MultiWriter(body)
+	io.Copy(writer, r)
+	cnt := body.Bytes()
+
 	for _, node := range rsp.List {
 		nodeId = node.NodeID
-		ret, err = s.uploadFileWithForm(ctx, r, name, node.UploadURL, node.Token, progress)
+
+		nr := bytes.NewReader(cnt)
+
+		ret, err = s.uploadFileWithForm(ctx, nr, name, node.UploadURL, node.Token, progress)
 		if err != nil {
 			err = fmt.Errorf("upload file with form failed, error: %s", err.Error())
 			log.Println(err)
@@ -740,8 +748,10 @@ func (s *storage) GetURL(ctx context.Context, rootCID string) (*client.ShareAsse
 
 // UploadFileWithURL uploads a file from the specified URL
 func (s *storage) UploadFileWithURL(ctx context.Context, url string, progress ProgressFunc) (string, string, error) {
+	log.Println("UploadFileWithURL link:", url)
 	rsp, err := http.Get(url)
 	if err != nil {
+		log.Printf("http.Get(%s) error: %s \n", url, err)
 		return "", "", err
 	}
 	defer rsp.Body.Close()
