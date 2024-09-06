@@ -150,6 +150,8 @@ type ListAssetSummaryRsp struct {
 type UploadInfo struct {
 	List          []*NodeUploadInfo
 	AlreadyExists bool
+	AreaID        string
+	Log           string
 }
 
 type NodeUploadInfo struct {

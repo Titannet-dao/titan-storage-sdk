@@ -369,10 +369,12 @@ func (s *storage) uploadFileWithForm(ctx context.Context, r io.Reader, name, upl
 
 	var ret UploadFileResult
 	if err := json.Unmarshal(b, &ret); err != nil {
+		log.Printf("Upload file to L1 node error, url %s, name %s, error: %s \n", uploadURL, name, err.Error())
 		return nil, err
 	}
 
 	if ret.Code != 0 {
+		log.Printf("Upload file to L1 node error, url %s, name %s, ret: %+v \n", uploadURL, name, ret)
 		return nil, fmt.Errorf(ret.Msg)
 	}
 
@@ -508,20 +510,41 @@ func (s *storage) UploadStreamV2(ctx context.Context, r io.Reader, name string, 
 	// }
 	// defer f.Close()
 
-	node := rsp.List[0]
+	// node := rsp.List[0]
 
-	ret, err := s.uploadFileWithForm(ctx, r, name, node.UploadURL, node.Token, progress)
-	if err != nil {
-		return cid.Cid{}, fmt.Errorf("upload file with form failed, %s", err.Error())
+	var (
+		ret    *UploadFileResult
+		root   cid.Cid
+		nodeId string
+	)
+
+	for _, node := range rsp.List {
+		nodeId = node.NodeID
+		ret, err = s.uploadFileWithForm(ctx, r, name, node.UploadURL, node.Token, progress)
+		if err != nil {
+			err = fmt.Errorf("upload file with form failed, error: %s", err.Error())
+			log.Println(err)
+			continue
+		}
+
+		if ret.Code != 0 {
+			err = fmt.Errorf("upload file with form failed, ret: %+v", ret)
+			log.Println(err)
+			continue
+		}
+
+		root, err = cid.Decode(ret.Cid)
+		if err != nil {
+			err = fmt.Errorf("decode cid %s failed, reason: %s", ret.Cid, err.Error())
+			log.Println(err)
+			continue
+		}
+
+		break
 	}
 
-	if ret.Code != 0 {
-		return cid.Cid{}, fmt.Errorf("upload file with form failed, %s", ret.Msg)
-	}
-
-	root, err := cid.Decode(ret.Cid)
 	if err != nil {
-		return cid.Cid{}, fmt.Errorf("decode cid %s failed, %s", ret.Cid, err.Error())
+		return cid.Cid{}, err
 	}
 
 	// fileType, err := getFileType(name)
@@ -534,14 +557,14 @@ func (s *storage) UploadStreamV2(ctx context.Context, r io.Reader, name string, 
 	// 	return cid.Cid{}, err
 	// }
 
-	fmt.Printf("f name %s, fileType name %s", name, "file")
+	log.Printf("f name %s, fileType name %s \n", name, "file")
 
 	assetProperty := client.AssetProperty{
 		AssetCID:  ret.Cid,
 		AssetName: name,
 		AssetSize: ret.totalSize,
 		AssetType: "file",
-		NodeID:    node.NodeID,
+		NodeID:    nodeId,
 		GroupID:   s.groupID,
 	}
 
