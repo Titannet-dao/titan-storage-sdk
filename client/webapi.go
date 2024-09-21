@@ -9,6 +9,8 @@ import (
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/ipfs/go-cid"
 )
 
 const isAssetAlreadyExist = 1017
@@ -180,6 +182,22 @@ type Result struct {
 	Data interface{}
 }
 
+const (
+	AssetTransferTypeUpload   = "upload"
+	AssetTransferTypeDownload = "download"
+)
+
+type AssetTransferReq struct {
+	UserId       string `json:"user_id"`
+	Cid          string `json:"cid"`
+	Hash         string `json:"hash"`
+	Rate         int64  `json:"rate"`
+	CostMs       int64  `json:"cost_ms"`
+	TotalSize    int64  `json:"total_size"`
+	Succeed      bool   `json:"succeed"`
+	TransferType string `json:"transfer_type"`
+}
+
 // Webserver defines the interface for the scheduler.
 type Webserver interface {
 	// AuthVerify checks whether the specified token is valid and returns the list of permissions associated with it.
@@ -217,6 +235,8 @@ type Webserver interface {
 	GetAPPKeyPermissions(ctx context.Context, userID, keyName string) ([]string, error)
 	// GetNodeUploadInfo
 	GetNodeUploadInfo(ctx context.Context, userID string, urlMode bool) (*UploadInfo, error)
+	// AssetTransferReport
+	AssetTransferReport(ctx context.Context, req AssetTransferReq) error
 }
 
 var _ Webserver = (*webserver)(nil)
@@ -742,6 +762,74 @@ func (s *webserver) GetNodeUploadInfo(ctx context.Context, userID string, urlMod
 	return uploadNodes, nil
 }
 
+// AssetTransferReport
+func (s *webserver) AssetTransferReport(ctx context.Context, req AssetTransferReq) error {
+	reportUrl := fmt.Sprintf("%s/api/v1/storage/transfer/report", s.url)
+
+	if req.Cid != "" {
+		hash, err := CIDToHash(req.Cid)
+		if err != nil {
+			return err
+		}
+
+		req.Hash = hash
+	}
+
+	// postData := AssetTransferReq{
+	// 	Cid:          cid,
+	// 	Hash:         hash,
+	// 	CostMs:       cost,
+	// 	TotalSize:    totalSize,
+	// 	Succeed:      succeed,
+	// 	TransferType: transferType,
+	// }
+
+	if req.Succeed {
+		// bytes per second
+		req.Rate = req.TotalSize / req.CostMs * 1000
+	}
+
+	jsonBytes, err := json.Marshal(req)
+	if err != nil {
+		return err
+	}
+
+	request, err := http.NewRequestWithContext(ctx, "POST", reportUrl, bytes.NewBuffer(jsonBytes))
+	if err != nil {
+		return err
+	}
+
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("apikey", s.apiKey)
+
+	rsp, err := s.client.Do(request)
+	if err != nil {
+		return err
+	}
+
+	if rsp.StatusCode != http.StatusOK {
+		buf, _ := io.ReadAll(rsp.Body)
+		return fmt.Errorf("status code %d, %s", rsp.StatusCode, string(buf))
+	}
+
+	body, err := io.ReadAll(rsp.Body)
+	if err != nil {
+		return err
+	}
+
+	ret := &Result{}
+	err = json.Unmarshal(body, ret)
+	if err != nil {
+		return err
+	}
+
+	if ret.Code != 0 {
+		return fmt.Errorf(fmt.Sprintf("code: %d, err: %d, msg: %s", ret.Code, ret.Err, ret.Msg))
+	}
+
+	return nil
+}
+
 func interfaceToStruct(input interface{}, output interface{}) error {
 	buf, err := json.Marshal(input)
 	if err != nil {
@@ -752,4 +840,14 @@ func interfaceToStruct(input interface{}, output interface{}) error {
 		return err
 	}
 	return nil
+}
+
+// CIDToHash converts a CID string to its corresponding hash string.
+func CIDToHash(cidString string) (string, error) {
+	cid, err := cid.Decode(cidString)
+	if err != nil {
+		return "", err
+	}
+
+	return cid.Hash().String(), nil
 }
