@@ -289,16 +289,41 @@ func (s *storage) uploadFilesWithPathAndMakeCar(ctx context.Context, filePath st
 	}
 
 	for _, ep := range rsp.Endpoints {
+		start := time.Now()
 		_, err = s.uploadFileWithForm(ctx, carFile, fileName, ep.CandidateAddr, ep.Token, progress)
-		if err != nil {
+
+		report := &client.AssetTransferReq{
+			CostMs:       int64(time.Since(start).Milliseconds()),
+			TotalSize:    assetProperty.AssetSize,
+			TransferType: client.AssetTransferTypeUpload,
+			Cid:          root.String(),
+		}
+
+		if err == nil {
+
+			report.Succeed = true
+			go func(r *client.AssetTransferReq) {
+				if err := s.webAPI.AssetTransferReport(context.Background(), *r); err != nil {
+					log.Printf("failed to send transfer report, %s", err.Error())
+				}
+			}(report)
+
+			return root, nil
+		} else {
+
 			fmt.Printf("upload req: %+v\n", ep)
+			go func(r *client.AssetTransferReq) {
+				if err := s.webAPI.AssetTransferReport(context.Background(), *r); err != nil {
+					log.Printf("failed to send transfer report, %s", err.Error())
+				}
+			}(report)
+
 			if delErr := s.webAPI.DeleteAsset(ctx, s.userID, root.String()); delErr != nil {
 				return cid.Cid{}, fmt.Errorf("uploadFileWithForm failed %s, delete error %s", err.Error(), delErr.Error())
 			}
 			return cid.Cid{}, fmt.Errorf("uploadFileWithForm error %s, delete it from titan", err.Error())
 		}
 
-		return root, nil
 	}
 
 	return cid.Cid{}, fmt.Errorf("upload file failed")
@@ -349,9 +374,11 @@ func (s *storage) uploadFileWithForm(ctx context.Context, r io.Reader, name, upl
 	request.Header.Set("Authorization", "Bearer "+token)
 	request = request.WithContext(ctx)
 
+	start := time.Now()
+
 	// Create an HTTP client and send the request
-	client := http.DefaultClient
-	response, err := client.Do(request)
+	httpClient := http.DefaultClient
+	response, err := httpClient.Do(request)
 	if err != nil {
 		return nil, fmt.Errorf("do error %s", err.Error())
 	}
@@ -367,6 +394,17 @@ func (s *storage) uploadFileWithForm(ctx context.Context, r io.Reader, name, upl
 		return nil, err
 	}
 
+	report := &client.AssetTransferReq{
+		CostMs:       int64(time.Since(start).Milliseconds()),
+		TotalSize:    int64(totalSize),
+		TransferType: client.AssetTransferTypeUpload,
+	}
+	defer func(r *client.AssetTransferReq) {
+		if err := s.webAPI.AssetTransferReport(context.Background(), *r); err != nil {
+			log.Printf("failed to send transfer report, %s", err.Error())
+		}
+	}(report)
+
 	var ret UploadFileResult
 	if err := json.Unmarshal(b, &ret); err != nil {
 		log.Printf("Upload file to L1 node error, url %s, name %s, error: %s \n", uploadURL, name, err.Error())
@@ -379,6 +417,10 @@ func (s *storage) uploadFileWithForm(ctx context.Context, r io.Reader, name, upl
 	}
 
 	ret.totalSize = int64(totalSize)
+
+	report.Cid = name
+	report.Succeed = true
+
 	return &ret, nil
 }
 
@@ -593,8 +635,28 @@ func (s *storage) GetFileWithCid(ctx context.Context, rootCID string) (io.ReadCl
 		return nil, "", err
 	}
 
+	start := time.Now()
+
 	r := byterange.New(1 << 20)
-	reader, err := r.GetFile(ctx, res)
+
+	reader, size, err := r.GetFile(ctx, res)
+
+	report := &client.AssetTransferReq{
+		CostMs:       int64(time.Since(start).Milliseconds()),
+		TotalSize:    size,
+		TransferType: client.AssetTransferTypeDownload,
+		Cid:          rootCID,
+	}
+
+	if err == nil {
+		report.Succeed = true
+	}
+
+	go func() {
+		if err := s.webAPI.AssetTransferReport(context.Background(), *report); err != nil {
+			log.Printf("failed to send transfer report, %s", err.Error())
+		}
+	}()
 
 	return reader, res.FileName, err
 	// taskCount := int64(len(res.URLs))

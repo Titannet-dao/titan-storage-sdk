@@ -40,20 +40,20 @@ func New(size int64) *Range {
 	}
 }
 
-func (r *Range) GetFile(ctx context.Context, resources *client.ShareAssetResult) (io.ReadCloser, error) {
+func (r *Range) GetFile(ctx context.Context, resources *client.ShareAssetResult) (io.ReadCloser, int64, error) {
 	workerChan, err := r.makeWorkerChan(ctx, resources)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	fileSize, err := r.getFileSize(ctx, workerChan)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	reader, writer, err := pipeat.Pipe()
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	(&dispatcher{
@@ -69,7 +69,8 @@ func (r *Range) GetFile(ctx context.Context, resources *client.ShareAssetResult)
 		},
 	}).run(ctx)
 
-	return reader, nil
+	// todo fix writer.GetWrittenBytes() with real total size
+	return reader, writer.GetWrittenBytes(), nil
 }
 
 func (r *Range) getFileSize(ctx context.Context, workerChan chan worker) (int64, error) {
