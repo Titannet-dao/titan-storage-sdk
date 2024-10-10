@@ -69,8 +69,7 @@ func (r *Range) GetFile(ctx context.Context, resources *client.ShareAssetResult)
 		},
 	}).run(ctx)
 
-	// todo fix writer.GetWrittenBytes() with real total size
-	return reader, writer.GetWrittenBytes(), nil
+	return reader, fileSize, nil
 }
 
 func (r *Range) getFileSize(ctx context.Context, workerChan chan worker) (int64, error) {

@@ -182,7 +182,7 @@ func (s *storage) UploadFilesWithPath(ctx context.Context, filePath string, prog
 
 	node := rsp.List[0]
 
-	ret, err := s.uploadFileWithForm(ctx, f, f.Name(), node.UploadURL, node.Token, progress)
+	ret, err := s.uploadFileWithForm(ctx, f, f.Name(), node.UploadURL, node.Token, rsp.TraceID, progress)
 	if err != nil {
 		return cid.Cid{}, fmt.Errorf("upload file with form failed, %s", err.Error())
 	}
@@ -288,40 +288,51 @@ func (s *storage) uploadFilesWithPathAndMakeCar(ctx context.Context, filePath st
 		return cid.Cid{}, fmt.Errorf("endpoints is empty")
 	}
 
-	for _, ep := range rsp.Endpoints {
-		start := time.Now()
-		_, err = s.uploadFileWithForm(ctx, carFile, fileName, ep.CandidateAddr, ep.Token, progress)
-
-		report := &client.AssetTransferReq{
-			CostMs:       int64(time.Since(start).Milliseconds()),
+	var (
+		report = &client.AssetTransferReq{
+			// CostMs:       int64(time.Since(start).Milliseconds()),
 			TotalSize:    assetProperty.AssetSize,
 			TransferType: client.AssetTransferTypeUpload,
 			Cid:          root.String(),
+			State:        client.AssetTransferStateFailed,
 		}
+		logContent = make(map[string]string)
+		// final      bool
+	)
+
+	defer func(r *client.AssetTransferReq) {
+		if err := s.webAPI.AssetTransferReport(context.Background(), *r); err != nil {
+			log.Printf("failed to send transfer report, %s", err.Error())
+		}
+	}(report)
+
+	for _, ep := range rsp.Endpoints {
+
+		nodeid := getNodeIdFromCandidateAddr(ep.CandidateAddr)
+		report.TraceID = ep.TraceID
+		// if upload succeed,
+		report.NodeID = joinNodeID(report.NodeID, nodeid)
+
+		start := time.Now()
+		_, err = s.uploadFileWithForm(ctx, carFile, fileName, ep.CandidateAddr, ep.Token, ep.TraceID, progress)
+		report.CostMs = int64(time.Since(start).Milliseconds())
 
 		if err == nil {
-
-			report.Succeed = true
-			go func(r *client.AssetTransferReq) {
-				if err := s.webAPI.AssetTransferReport(context.Background(), *r); err != nil {
-					log.Printf("failed to send transfer report, %s", err.Error())
-				}
-			}(report)
-
+			report.State = client.AssetTransferStateSuccess
 			return root, nil
 		} else {
-
 			fmt.Printf("upload req: %+v\n", ep)
-			go func(r *client.AssetTransferReq) {
-				if err := s.webAPI.AssetTransferReport(context.Background(), *r); err != nil {
-					log.Printf("failed to send transfer report, %s", err.Error())
-				}
-			}(report)
+			logContent[nodeid] = err.Error()
+			// go func(r *client.AssetTransferReq) {
+			// 	if err := s.webAPI.AssetTransferReport(context.Background(), *r); err != nil {
+			// 		log.Printf("failed to send transfer report, %s", err.Error())
+			// 	}
+			// }(report)
 
 			if delErr := s.webAPI.DeleteAsset(ctx, s.userID, root.String()); delErr != nil {
 				return cid.Cid{}, fmt.Errorf("uploadFileWithForm failed %s, delete error %s", err.Error(), delErr.Error())
 			}
-			return cid.Cid{}, fmt.Errorf("uploadFileWithForm error %s, delete it from titan", err.Error())
+			// return cid.Cid{}, fmt.Errorf("uploadFileWithForm error %s, delete it from titan", err.Error())
 		}
 
 	}
@@ -329,8 +340,31 @@ func (s *storage) uploadFilesWithPathAndMakeCar(ctx context.Context, filePath st
 	return cid.Cid{}, fmt.Errorf("upload file failed")
 }
 
+func joinNodeID(str string, nodeID string) string {
+	if str == "" {
+		return nodeID
+	}
+
+	return fmt.Sprintf("%s,%s", str, nodeID)
+}
+
+func getNodeIdFromCandidateAddr(addr string) string {
+	u, err := url.Parse(addr)
+	if err != nil {
+		return ""
+	}
+
+	re := regexp.MustCompile(`([a-f0-9\-]+)\.`)
+	matches := re.FindStringSubmatch(u.Host)
+
+	if len(matches) > 1 {
+		return matches[1]
+	}
+	return ""
+}
+
 // uploadFileWithForm uploads a file using a multipart form
-func (s *storage) uploadFileWithForm(ctx context.Context, r io.Reader, name, uploadURL, token string, progress ProgressFunc) (*UploadFileResult, error) {
+func (s *storage) uploadFileWithForm(ctx context.Context, r io.Reader, name, uploadURL, token, trace_id string, progress ProgressFunc) (*UploadFileResult, error) {
 	// Create a new multipart form body
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
@@ -398,6 +432,8 @@ func (s *storage) uploadFileWithForm(ctx context.Context, r io.Reader, name, upl
 		CostMs:       int64(time.Since(start).Milliseconds()),
 		TotalSize:    int64(totalSize),
 		TransferType: client.AssetTransferTypeUpload,
+		State:        client.AssetTransferStateFailed,
+		TraceID:      trace_id,
 	}
 	defer func(r *client.AssetTransferReq) {
 		if err := s.webAPI.AssetTransferReport(context.Background(), *r); err != nil {
@@ -409,6 +445,7 @@ func (s *storage) uploadFileWithForm(ctx context.Context, r io.Reader, name, upl
 	if err := json.Unmarshal(b, &ret); err != nil {
 		log.Printf("Upload file to L1 node error, url %s, name %s, error: %s \n", uploadURL, name, err.Error())
 		return nil, err
+
 	}
 
 	if ret.Code != 0 {
@@ -419,7 +456,7 @@ func (s *storage) uploadFileWithForm(ctx context.Context, r io.Reader, name, upl
 	ret.totalSize = int64(totalSize)
 
 	report.Cid = name
-	report.Succeed = true
+	report.State = client.AssetTransferStateSuccess
 
 	return &ret, nil
 }
@@ -478,7 +515,7 @@ func (s *storage) UploadStream(ctx context.Context, r io.Reader, name string, pr
 
 	c := len(rsp.Endpoints)
 	for i, ep := range rsp.Endpoints {
-		_, err = s.uploadFileWithForm(ctx, memFile, root.String(), ep.CandidateAddr, ep.Token, progress)
+		_, err = s.uploadFileWithForm(ctx, memFile, root.String(), ep.CandidateAddr, ep.Token, ep.TraceID, progress)
 		if err != nil {
 			// fmt.Printf("upload req: %+v\n", ep)
 			// return cid.Cid{}, fmt.Errorf("uploadFileWithForm error %s, delete it from titan", err.Error())
@@ -570,7 +607,7 @@ func (s *storage) UploadStreamV2(ctx context.Context, r io.Reader, name string, 
 
 		nr := bytes.NewReader(cnt)
 
-		ret, err = s.uploadFileWithForm(ctx, nr, name, node.UploadURL, node.Token, progress)
+		ret, err = s.uploadFileWithForm(ctx, nr, name, node.UploadURL, node.Token, rsp.TraceID, progress)
 		if err != nil {
 			err = fmt.Errorf("upload file with form failed, error: %s", err.Error())
 			log.Println(err)
@@ -646,10 +683,12 @@ func (s *storage) GetFileWithCid(ctx context.Context, rootCID string) (io.ReadCl
 		TotalSize:    size,
 		TransferType: client.AssetTransferTypeDownload,
 		Cid:          rootCID,
+		State:        client.AssetTransferStateFailed,
+		TraceID:      res.TraceID,
 	}
 
 	if err == nil {
-		report.Succeed = true
+		report.State = client.AssetTransferStateSuccess
 	}
 
 	go func() {

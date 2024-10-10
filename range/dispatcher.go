@@ -92,61 +92,61 @@ func (d *dispatcher) run(ctx context.Context) {
 		finished = make(chan int64, 1)
 	)
 
-	go func() {
-		for {
-			select {
-			case w := <-d.workers:
-				go func() {
-					j, ok := d.todos.Pop()
-					if !ok {
-						d.workers <- w
-						return
-					}
-
-					data, err := d.fetch(ctx, w, j)
-					if err != nil {
-						errMsg := fmt.Sprintf("pull data failed : %v", err)
-						if j.retry > 0 {
-							log.Errorf("pull data failed (retries: %d): %v", j.retry, err)
-							<-time.After(d.backoff.next(j.retry))
-						}
-
-						log.Warnf(errMsg)
-
-						j.retry++
-						d.todos.PushFront(j)
-						d.workers <- w
-						return
-					}
-
-					dataLen := j.end - j.start
-
-					if int64(len(data)) < dataLen {
-						log.Errorf("unexpected data size, want %d got %d", dataLen, len(data))
-						d.todos.PushFront(j)
-						d.workers <- w
-						return
-					}
-
+	// go func() {
+	for {
+		select {
+		case w := <-d.workers:
+			go func() {
+				j, ok := d.todos.Pop()
+				if !ok {
 					d.workers <- w
-					d.resp <- response{
-						data:   data[:dataLen],
-						offset: j.start,
-					}
-					finished <- dataLen
-				}()
-			case size := <-finished:
-				counter += size
-				if counter >= d.fileSize {
 					return
 				}
-			case <-ctx.Done():
+
+				data, err := d.fetch(ctx, w, j)
+				if err != nil {
+					errMsg := fmt.Sprintf("pull data failed : %v", err)
+					if j.retry > 0 {
+						log.Errorf("pull data failed (retries: %d): %v", j.retry, err)
+						<-time.After(d.backoff.next(j.retry))
+					}
+
+					log.Warnf(errMsg)
+
+					j.retry++
+					d.todos.PushFront(j)
+					d.workers <- w
+					return
+				}
+
+				dataLen := j.end - j.start
+
+				if int64(len(data)) < dataLen {
+					log.Errorf("unexpected data size, want %d got %d", dataLen, len(data))
+					d.todos.PushFront(j)
+					d.workers <- w
+					return
+				}
+
+				d.workers <- w
+				d.resp <- response{
+					data:   data[:dataLen],
+					offset: j.start,
+				}
+				finished <- dataLen
+			}()
+		case size := <-finished:
+			counter += size
+			if counter >= d.fileSize {
 				return
 			}
+		case <-ctx.Done():
+			return
 		}
-	}()
+	}
+	// }()
 
-	return
+	// return
 }
 
 func (d *dispatcher) writeData(ctx context.Context) {
