@@ -73,9 +73,11 @@ func NewWebserver(url string, apiKey string, area string) Webserver {
 type webserver struct {
 	// client *Client
 	url    string
-	apiKey string
 	area   string
 	client *http.Client
+
+	apiKey string
+	token  string
 }
 
 func (s *webserver) GetVipInfo(ctx context.Context) (*VipInfo, error) {
@@ -85,7 +87,7 @@ func (s *webserver) GetVipInfo(ctx context.Context) (*VipInfo, error) {
 		return nil, err
 	}
 
-	req.Header.Set("apikey", s.apiKey)
+	s.setCredential(req)
 
 	rsp, err := s.client.Do(req)
 	if err != nil {
@@ -128,7 +130,7 @@ func (s *webserver) LisgAreaIDs(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 
-	req.Header.Set("apikey", s.apiKey)
+	s.setCredential(req)
 
 	rsp, err := s.client.Do(req)
 	if err != nil {
@@ -199,7 +201,7 @@ func (s *webserver) CreateAsset(ctx context.Context, caReq *CreateAssetReq) (*Cr
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("apikey", s.apiKey)
+	s.setCredential(req)
 
 	rsp, err := s.client.Do(req)
 	if err != nil {
@@ -247,7 +249,7 @@ func (s *webserver) DeleteAsset(ctx context.Context, userID, assetCID string) er
 		return err
 	}
 
-	req.Header.Set("apikey", s.apiKey)
+	s.setCredential(req)
 
 	rsp, err := s.client.Do(req)
 	if err != nil {
@@ -279,13 +281,13 @@ func (s *webserver) DeleteAsset(ctx context.Context, userID, assetCID string) er
 
 // ShareAsset shares user assets.
 func (s *webserver) ShareAsset(ctx context.Context, userID, areaID, assetCID string) (*ShareAssetResult, error) {
-	url := fmt.Sprintf("%s/api/v1/storage/share_asset?user_id=%s&area_id=%s&asset_cid=%s", s.url, userID, areaID, assetCID)
+	url := fmt.Sprintf("%s/api/v1/storage/share_asset?user_id=%s&area_id=%s&asset_cid=%s&need_trace=true", s.url, userID, areaID, assetCID)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	req.Header.Set("apikey", s.apiKey)
+	s.setCredential(req)
 
 	rsp, err := s.client.Do(req)
 	if err != nil {
@@ -334,7 +336,7 @@ func (s *webserver) ListAssets(ctx context.Context, parent, pageSize, page int) 
 		log.Fatalf("Error creating request: %v", err)
 	}
 
-	req.Header.Set("apikey", s.apiKey)
+	s.setCredential(req)
 
 	rsp, err := s.client.Do(req)
 	if err != nil {
@@ -394,7 +396,7 @@ func (s *webserver) CreateGroup(ctx context.Context, name string, parent int) (*
 		return nil, err
 	}
 
-	req.Header.Set("apikey", s.apiKey)
+	s.setCredential(req)
 
 	rsp, err := s.client.Do(req)
 	if err != nil {
@@ -440,7 +442,7 @@ func (s *webserver) ListGroups(ctx context.Context, parent, pageSize, page int) 
 		log.Fatalf("Error creating request: %v", err)
 	}
 
-	req.Header.Set("apikey", s.apiKey)
+	s.setCredential(req)
 
 	rsp, err := s.client.Do(req)
 	if err != nil {
@@ -488,7 +490,7 @@ func (s *webserver) DeleteGroup(ctx context.Context, userID string, gid int) err
 		log.Fatalf("Error creating request: %v", err)
 	}
 
-	req.Header.Set("apikey", s.apiKey)
+	s.setCredential(req)
 
 	rsp, err := s.client.Do(req)
 	if err != nil {
@@ -551,7 +553,7 @@ func (s *webserver) GetNodeUploadInfo(ctx context.Context, userID string, urlMod
 		return nil, err
 	}
 
-	req.Header.Set("apikey", s.apiKey)
+	s.setCredential(req)
 
 	rsp, err := s.client.Do(req)
 	if err != nil {
@@ -653,6 +655,15 @@ func (s *webserver) AssetTransferReport(ctx context.Context, req AssetTransferRe
 	}
 
 	return nil
+}
+
+func (s *webserver) setCredential(r *http.Request) {
+	if s.apiKey != "" {
+		r.Header.Set("apikey", s.apiKey)
+	}
+	if s.token != "" {
+		r.Header.Set("jwtauthorization", fmt.Sprintf("Bearer %s", s.token))
+	}
 }
 
 func interfaceToStruct(input interface{}, output interface{}) error {

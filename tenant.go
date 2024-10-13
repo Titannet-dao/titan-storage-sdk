@@ -27,6 +27,8 @@ type Tenant interface {
 	RefreshToken(ctx context.Context, token string) (*SSOLoginRsp, error)
 	// ValidateUploadCallback validate upload callback request from titan-explorer
 	ValidateUploadCallback(ctx context.Context, apiSecret string, r *http.Request) (*AssetUploadNotifyCallback, error)
+	// ValidateDeleteCallback validate delete callback request from titan-explorer
+	ValidateDeleteCallback(ctx context.Context, apiSecret string, r *http.Request) (*AssetDeleteNotifyCallback, error)
 }
 
 type tenant struct {
@@ -242,12 +244,13 @@ type AssetUploadNotifyCallback struct {
 	TenantID string //
 	UserID   string //
 
-	AssetName   string
-	AssetCID    string
-	AssetType   string
-	AssetSize   int64
-	GroupID     int64
-	CreatedTime time.Time
+	AssetName      string
+	AssetCID       string
+	AssetType      string
+	AssetSize      int64
+	GroupID        int64
+	CreatedTime    time.Time
+	AssetDirectUrl string
 }
 
 var (
@@ -290,6 +293,56 @@ func (t *tenant) ValidateUploadCallback(ctx context.Context, apiSecret string, r
 	}
 
 	var payload AssetUploadNotifyCallback
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, fmt.Errorf("invalid JSON payload: %s", err)
+	}
+
+	return &payload, nil
+}
+
+type AssetDeleteNotifyCallback struct {
+	ExtraID  string // outer file id
+	TenantID string //
+	UserID   string //
+	AssetCID string
+}
+
+// ValidateDeleteCallback validate delete callback request from titan-explorer
+func (t *tenant) ValidateDeleteCallback(ctx context.Context, apiSecret string, r *http.Request) (*AssetDeleteNotifyCallback, error) {
+
+	signature := r.Header.Get("X-Signature")
+	timestamp := r.Header.Get("X-Timestamp")
+	nonce := r.Header.Get("X-Nonce")
+
+	// read callback body content
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read request body: %v", err)
+	}
+	defer r.Body.Close()
+
+	// validate timestamp to avoid replay attack
+	requestTime, err := time.Parse(time.RFC3339, timestamp)
+	if err != nil || time.Since(requestTime) > 5*time.Minute {
+		return nil, fmt.Errorf("invalid or expired timestamp: %v", err)
+	}
+
+	// validate nonce to make sure same callback not received twice
+	nonceMutex.Lock()
+	if processedNonces[nonce] {
+		nonceMutex.Unlock()
+		return nil, fmt.Errorf("nonce already used: %s", nonce)
+	}
+	processedNonces[nonce] = true
+	nonceMutex.Unlock()
+
+	// validate signature
+	expectedSignature := genCallbackSignature(apiSecret, r.Method, r.URL.Path, string(body), timestamp, nonce)
+	if !hmac.Equal([]byte(expectedSignature), []byte(signature)) {
+		return nil, fmt.Errorf("invalid signature: %v", err)
+	}
+
+	var payload AssetDeleteNotifyCallback
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return nil, fmt.Errorf("invalid JSON payload: %s", err)
 	}

@@ -99,7 +99,14 @@ type storage struct {
 
 type Config struct {
 	TitanURL string
-	APIKey   string
+
+	// APIKey and Token set one of the two authentication methods.
+	//
+	// APIKey is used for long-lived access.
+	// Token is created after you have logged in with expire time.
+	APIKey string
+	Token  string
+
 	// Setting the directory for file uploads
 	// default is 0, 0 is root directory
 	GroupID     int
@@ -109,8 +116,8 @@ type Config struct {
 
 // NewStorage creates a new Storage instance
 func NewStorage(cfg *Config) (Storage, error) {
-	if len(cfg.TitanURL) == 0 || len(cfg.APIKey) == 0 {
-		return nil, fmt.Errorf("TitanURL or APIKey can not empty")
+	if len(cfg.TitanURL) == 0 || len(cfg.APIKey) == 0 || len(cfg.Token) == 0 {
+		return nil, fmt.Errorf("TitanURL or APIKey or Token can not empty")
 	}
 	// tlsConfig := tls.Config{InsecureSkipVerify: true}
 	// httpClient := &http.Client{
