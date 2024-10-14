@@ -116,8 +116,11 @@ type Config struct {
 
 // NewStorage creates a new Storage instance
 func NewStorage(cfg *Config) (Storage, error) {
-	if len(cfg.TitanURL) == 0 || len(cfg.APIKey) == 0 || len(cfg.Token) == 0 {
-		return nil, fmt.Errorf("TitanURL or APIKey or Token can not empty")
+	if len(cfg.TitanURL) == 0 {
+		return nil, fmt.Errorf("TitanURL can not empty")
+	}
+	if len(cfg.APIKey) == 0 && len(cfg.Token) == 0 {
+		return nil, fmt.Errorf("APIKey or Token can not empty")
 	}
 	// tlsConfig := tls.Config{InsecureSkipVerify: true}
 	// httpClient := &http.Client{
@@ -133,7 +136,7 @@ func NewStorage(cfg *Config) (Storage, error) {
 	// headers := http.Header{}
 	// headers.Add("Authorization", "Bearer "+cfg.APIKey)
 
-	webAPI := client.NewWebserver(cfg.TitanURL, cfg.APIKey, cfg.AreaID)
+	webAPI := client.NewWebserver(cfg.TitanURL, cfg.APIKey, cfg.Token, cfg.AreaID)
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()

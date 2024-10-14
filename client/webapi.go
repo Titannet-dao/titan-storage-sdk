@@ -66,8 +66,8 @@ type Webserver interface {
 var _ Webserver = (*webserver)(nil)
 
 // NewWebserver creates a new Scheduler instance with the specified URL, headers, and options.
-func NewWebserver(url string, apiKey string, area string) Webserver {
-	return &webserver{url: url, apiKey: apiKey, client: http.DefaultClient, area: area}
+func NewWebserver(url string, apiKey, token string, area string) Webserver {
+	return &webserver{url: url, apiKey: apiKey, token: token, client: http.DefaultClient, area: area}
 }
 
 type webserver struct {
