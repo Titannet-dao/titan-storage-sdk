@@ -7,9 +7,9 @@ toolchain go1.22.5
 require (
 	github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d
 	github.com/eikenb/pipeat v0.0.0-20210730190139-06b3e6902001
+	github.com/ipfs/boxo v0.24.0
 	github.com/ipfs/go-block-format v0.2.0
 	github.com/ipfs/go-cid v0.4.1
-	github.com/ipfs/go-libipfs v0.6.0
 	github.com/ipfs/go-log v1.0.5
 	github.com/ipfs/go-unixfsnode v1.9.0
 	github.com/ipld/go-car v0.6.2
