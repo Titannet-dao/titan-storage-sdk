@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -289,6 +290,13 @@ func (t *tenant) ValidateUploadCallback(ctx context.Context, apiSecret string, r
 	// validate signature
 	expectedSignature := genCallbackSignature(apiSecret, r.Method, r.URL.Path, string(body), timestamp, nonce)
 	if !hmac.Equal([]byte(expectedSignature), []byte(signature)) {
+		log.Printf("signature: %s, expected: %s\n", signature, expectedSignature)
+		log.Printf("apiSecret: %s\n", apiSecret)
+		log.Printf("r.Method: %s\n", r.Method)
+		log.Printf("r.URL.Path: %s\n", r.URL.Path)
+		log.Printf("r.Body: %s\n", string(body))
+		log.Printf("timestamp: %s\n", timestamp)
+		log.Printf("nonce: %s\n", nonce)
 		return nil, fmt.Errorf("invalid signature: %v", err)
 	}
 
