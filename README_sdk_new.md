@@ -10,7 +10,7 @@ go get -u github.com/utopiosphe/titan-storage-sdk
 
 Retrieve the apikey and use it to initialize the go SDK
 
-![](https://pic.imgdb.cn/item/670f68c5d29ded1a8cfb15f3.png)
+![](doc/access_key.jpg)
 
 ```go
 package main
