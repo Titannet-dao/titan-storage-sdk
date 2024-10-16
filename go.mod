@@ -4,14 +4,12 @@ go 1.22
 
 toolchain go1.22.5
 
-replace github.com/ipfs/go-libipfs => github.com/ipfs/boxo v0.24.0
-
 require (
 	github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d
 	github.com/eikenb/pipeat v0.0.0-20210730190139-06b3e6902001
 	github.com/ipfs/go-block-format v0.2.0
 	github.com/ipfs/go-cid v0.4.1
-	github.com/ipfs/go-ipfs-files v0.3.0
+	github.com/ipfs/go-libipfs v0.6.0
 	github.com/ipfs/go-log v1.0.5
 	github.com/ipfs/go-unixfsnode v1.9.0
 	github.com/ipld/go-car v0.6.2
@@ -45,7 +43,6 @@ require (
 	github.com/ipfs/go-ipld-cbor v0.1.0 // indirect
 	github.com/ipfs/go-ipld-format v0.6.0 // indirect
 	github.com/ipfs/go-ipld-legacy v0.2.1 // indirect
-	github.com/ipfs/go-libipfs v0.6.0 // indirect
 	github.com/ipfs/go-log/v2 v2.5.1 // indirect
 	github.com/ipfs/go-merkledag v0.11.0 // indirect
 	github.com/ipfs/go-metrics-interface v0.0.1 // indirect
