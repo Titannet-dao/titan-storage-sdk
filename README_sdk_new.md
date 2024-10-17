@@ -28,7 +28,7 @@ var storageCli storage.Storage
 func init() {
     var err error
 
-    storageCli,err = storage.NewStorage(&storage.Config{
+    storageCli,err = storage.Initialize(&storage.Config{
         TitanURL: titanStorageURL,
         APIKey: os.Getenv("apikey"),
     })
@@ -41,14 +41,15 @@ func init() {
 ### Go SDK Method With Client
 |Method|Description|
 |:-|:-|
-|UploadFilesWithPath|upload files from the local file system|
-|UploadFileWithURL|uploads a file from the specified URL|
-|UploadStream|upload data from an io.Reader stream|
-|UploadStreamV2|upload data from an io.Reader stream without making car|
-|ListUserAssets|retrieves a list of user assets from the titan storage|
-|Delete|remove the data associated with the specified rootCID from the titan storage|
-|GetURL|retrieves the URL and asset size associated with the specified rootCID from the titan storage|
-|GetFileWithCid|retrieves the file content associated with the specified rootCID from the titan storage|
-|CreateGroup|create a group|
-|ListGroups|list groups|
-|DeleteGroup|delete special group|
+|ListRegions|Retrieve the list of area IDs from the scheduler|
+|CreateFolder|Create directories, including root and subdirectories|
+|ListDirectoryContents|Retrieve a list of all folders and files|
+|RenameFolder|Rename a specific folder|
+|RenameAsset|Rename a specific file|
+|DeleteFolder|Delete a specific folder|
+|DeleteAsset|Delete a specific file|
+|GetUserProfile|Retrieve user-related information|
+|GetltemDetails|Get detailed information about files/folders|
+|CreateSharedLink|Share file/folder data|
+|UploadAsset|Upload files/folders|
+|DownloadAsset|Download files/folders|
