@@ -23,12 +23,12 @@ const (
     titanStorageURL = "https://api-test1.container1.titannet.io"
 )
 
-var storageCli storage.Storage
+var TitanStorage storage.Storage
 
 func init() {
     var err error
 
-    storageCli,err = storage.Initialize(&storage.Config{
+    TitanStorage,err = storage.Initialize(&storage.Config{
         TitanURL: titanStorageURL,
         APIKey: os.Getenv("apikey"),
     })
@@ -41,15 +41,15 @@ func init() {
 ### Go SDK Method With Client
 |Method|Description|
 |:-|:-|
-|ListRegions|Retrieve the list of area IDs from the scheduler|
-|CreateFolder|Create directories, including root and subdirectories|
-|ListDirectoryContents|Retrieve a list of all folders and files|
-|RenameFolder|Rename a specific folder|
-|RenameAsset|Rename a specific file|
-|DeleteFolder|Delete a specific folder|
-|DeleteAsset|Delete a specific file|
-|GetUserProfile|Retrieve user-related information|
-|GetltemDetails|Get detailed information about files/folders|
-|CreateSharedLink|Share file/folder data|
-|UploadAsset|Upload files/folders|
-|DownloadAsset|Download files/folders|
+|TitanStorage.ListRegions|Retrieve the list of area IDs from the scheduler|
+|TitanStorage.CreateFolder|Create directories, including root and subdirectories|
+|TitanStorage.ListDirectoryContents|Retrieve a list of all folders and files|
+|TitanStorage.RenameFolder|Rename a specific folder|
+|TitanStorage.RenameAsset|Rename a specific file|
+|TitanStorage.DeleteFolder|Delete a specific folder|
+|TitanStorage.DeleteAsset|Delete a specific file|
+|TitanStorage.GetUserProfile|Retrieve user-related information|
+|TitanStorage.GetltemDetails|Get detailed information about files/folders|
+|TitanStorage.CreateSharedLink|Share file/folder data|
+|TitanStorage.UploadAsset|Upload files/folders|
+|TitanStorage.DownloadAsset|Download files/folders|
