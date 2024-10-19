@@ -60,10 +60,12 @@ var uploadCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		s, err := storage.NewStorage(&storage.Config{TitanURL: titanURL, APIKey: apiKey, AreaID: getAreaIDFromEnv()})
+		s, err := storage.NewStorage(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
 		if err != nil {
 			log.Fatal("NewStorage error ", err)
 		}
+
+		s.SetAreas(context.Background(), []string{getAreaIDFromEnv()})
 
 		startTime := time.Now()
 		fileSize := int64(0)

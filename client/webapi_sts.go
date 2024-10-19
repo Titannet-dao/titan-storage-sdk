@@ -26,7 +26,7 @@ type AssetProperty struct {
 
 type CreateAssetReq struct {
 	// UserID string
-	AreaID string
+	AreaIDs []string
 	AssetProperty
 }
 
