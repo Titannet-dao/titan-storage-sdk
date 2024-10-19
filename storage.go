@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/utopiosphe/titan-storage-sdk/client"
+	byterange "github.com/utopiosphe/titan-storage-sdk/range"
 
 	"github.com/ipfs/go-cid"
 )
@@ -62,9 +64,12 @@ type Storage interface {
 	// DeleteFolder delete special folder
 	DeleteFolder(ctx context.Context, folderID int) error
 
-	// DeleteAsset Delete removes the data associated with the specified rootCID from the titan storage
+	// DeleteAsset Delete a specific file
 	// It returns any error encountered during the deletion process.
 	DeleteAsset(ctx context.Context, rootCID string) error
+
+	// GetUserProfile Retrieve user-related information
+	GetUserProfile(ctx context.Context) (*client.UserProfile, error)
 
 	// GetItemDetails Get detailed information about files/folders
 	GetItemDetails(ctx context.Context, assetCID string, folderID int) (*client.ListAssetRecordRsp, error)
@@ -73,7 +78,7 @@ type Storage interface {
 	CreateSharedLink(ctx context.Context, assetCID string, folderID int) (string, error)
 
 	// UploadAsset Upload files/folders
-	UploadAsset(ctx context.Context, filePath string, reader io.Reader, progress ProgressFunc) (cid cid.Cid, fileName string, err error)
+	UploadAsset(ctx context.Context, filePath string, reader io.Reader, progress ProgressFunc) (cid cid.Cid, err error)
 
 	// UploadAssetWithUrl
 	UploadAssetWithUrl(ctx context.Context, url string) (cid cid.Cid, fileName string, err error)
@@ -249,6 +254,31 @@ func (s *storage) DeleteAsset(ctx context.Context, rootCID string) error {
 	return s.webAPI.DeleteAsset(ctx, s.userID, rootCID)
 }
 
+// GetUserProfile Retrieve user-related information
+func (s *storage) GetUserProfile(ctx context.Context) (*client.UserProfile, error) {
+
+	userStorage, err := s.webAPI.GetUserStorage(ctx)
+	if err != nil {
+		log.Printf("Failed to get user storage, %v", err)
+	}
+
+	vipInfo, err := s.webAPI.GetVipInfo(ctx)
+	if err != nil {
+		log.Printf("Failed to get vip info, %v", err)
+	}
+
+	assetCount, err := s.webAPI.GetAssetCount(ctx)
+	if err != nil {
+		log.Printf("Failed to get asset count, %v", err)
+	}
+
+	return &client.UserProfile{
+		UserStorage: userStorage,
+		Vip:         vipInfo,
+		AssetCount:  assetCount,
+	}, nil
+}
+
 // GetItemDetails Get detailed information about files/folders
 func (s *storage) GetItemDetails(ctx context.Context, assetCID string, folderID int) (*client.ListAssetRecordRsp, error) {
 	return s.webAPI.ListAssets(ctx, 0, 0, 0, assetCID, folderID)
@@ -256,25 +286,74 @@ func (s *storage) GetItemDetails(ctx context.Context, assetCID string, folderID 
 
 // CreateSharedLink Share file/folder data
 func (s *storage) CreateSharedLink(ctx context.Context, assetCID string, folderID int) (string, error) {
-	if folderID > 0 {
-		return "", errors.New("not implemented yet")
-	}
-
+	// if folderID > 0 {
+	// 	return "", errors.New("not implemented yet")
+	// }
+	return "", errors.New("not implemented yet")
 }
 
 // UploadAsset Upload files/folders
-func (s *storage) UploadAsset(ctx context.Context, filePath string, reader io.Reader, progress ProgressFunc) (cid cid.Cid, fileName string, err error) {
-	//
+func (s *storage) UploadAsset(ctx context.Context, filePath string, reader io.Reader, progress ProgressFunc) (cid.Cid, error) {
+	if filePath != "" {
+		fileType, err := getFileType(filePath)
+		if err != nil {
+			return cid.Cid{}, err
+		}
+
+		if fileType == string(FileTypeFolder) {
+			return s.uploadFilesWithPathAndMakeCar(ctx, filePath, progress)
+		}
+
+		if fileType == string(FileTypeFile) {
+			return s.UploadFilesWithPath(ctx, filePath, progress, false)
+		}
+	}
+
+	if reader != nil {
+		return s.UploadStreamV2(ctx, reader, "", progress)
+	}
+
+	return cid.Cid{}, errors.New("FilePath or Reader must be non empty")
 }
 
 // UploadAssetWithUrl
-func (s *storage) UploadAssetWithUrl(ctx context.Context, url string) (cid cid.Cid, fileName string, err error) {
-
+func (s *storage) UploadAssetWithUrl(ctx context.Context, url string) (cid.Cid, string, error) {
+	return cid.Cid{}, "", errors.New("not implemented yet")
 }
 
 // DownloadAsset Download files/folders
 func (s *storage) DownloadAsset(ctx context.Context, assetCID string) (io.ReadCloser, string, error) {
+	res, err := s.GetURL(ctx, assetCID)
+	if err != nil {
+		return nil, "", err
+	}
 
+	start := time.Now()
+
+	r := byterange.New(1 << 20)
+
+	reader, size, err := r.GetFile(ctx, res)
+
+	report := &client.AssetTransferReq{
+		CostMs:       int64(time.Since(start).Milliseconds()),
+		TotalSize:    size,
+		TransferType: client.AssetTransferTypeDownload,
+		Cid:          assetCID,
+		State:        client.AssetTransferStateFailed,
+		TraceID:      res.TraceID,
+	}
+
+	if err == nil {
+		report.State = client.AssetTransferStateSuccess
+	}
+
+	go func() {
+		if err := s.webAPI.AssetTransferReport(context.Background(), *report); err != nil {
+			log.Printf("failed to send transfer report, %s", err.Error())
+		}
+	}()
+
+	return reader, res.FileName, err
 }
 
 func joinNodeID(str string, nodeID string) string {

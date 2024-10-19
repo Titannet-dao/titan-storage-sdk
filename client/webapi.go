@@ -63,6 +63,12 @@ type Webserver interface {
 	GetNodeUploadInfo(ctx context.Context, userID, area string, urlMode bool) (*UploadInfo, error)
 	// AssetTransferReport
 	AssetTransferReport(ctx context.Context, req AssetTransferReq) error
+
+	// GetUserStorage
+	GetUserStorage(ctx context.Context) (*UserStorageInfo, error)
+
+	// GetAssetCount
+	GetAssetCount(ctx context.Context) (*AssetCountInfo, error)
 }
 
 var _ Webserver = (*webserver)(nil)
@@ -736,6 +742,96 @@ func (s *webserver) AssetTransferReport(ctx context.Context, req AssetTransferRe
 	}
 
 	return nil
+}
+
+// GetUserStorage
+func (s *webserver) GetUserStorage(ctx context.Context) (*UserStorageInfo, error) {
+	url := fmt.Sprintf("%s/api/v1/storage/get_storage_size", s.url)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	s.setCredential(req)
+
+	rsp, err := s.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if rsp.StatusCode != http.StatusOK {
+		buf, _ := io.ReadAll(rsp.Body)
+		return nil, fmt.Errorf("status code %d %s", rsp.StatusCode, string(buf))
+	}
+
+	body, err := io.ReadAll(rsp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	ret := &Result{}
+	err = json.Unmarshal(body, ret)
+	if err != nil {
+		return nil, err
+	}
+
+	if ret.Code != 0 {
+		return nil, fmt.Errorf(fmt.Sprintf("code: %d, err: %d, msg: %s", ret.Code, ret.Err, ret.Msg))
+	}
+
+	storageInfo := &UserStorageInfo{}
+	err = interfaceToStruct(ret.Data, storageInfo)
+	if err != nil {
+		return nil, err
+	}
+
+	return storageInfo, nil
+}
+
+// GetAssetCount
+func (s *webserver) GetAssetCount(ctx context.Context) (*AssetCountInfo, error) {
+	url := fmt.Sprintf("%s/api/v1/storage/get_asset_count", s.url)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	s.setCredential(req)
+
+	rsp, err := s.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if rsp.StatusCode != http.StatusOK {
+		buf, _ := io.ReadAll(rsp.Body)
+		return nil, fmt.Errorf("status code %d %s", rsp.StatusCode, string(buf))
+	}
+
+	body, err := io.ReadAll(rsp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	ret := &Result{}
+	err = json.Unmarshal(body, ret)
+	if err != nil {
+		return nil, err
+	}
+
+	if ret.Code != 0 {
+		return nil, fmt.Errorf(fmt.Sprintf("code: %d, err: %d, msg: %s", ret.Code, ret.Err, ret.Msg))
+	}
+
+	assetCount := &AssetCountInfo{}
+	err = interfaceToStruct(ret.Data, assetCount)
+	if err != nil {
+		return nil, err
+	}
+
+	return assetCount, nil
 }
 
 func (s *webserver) setCredential(r *http.Request) {

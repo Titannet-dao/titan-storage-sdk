@@ -185,3 +185,23 @@ type AssetTransferReq struct {
 	TransferType string `json:"transfer_type"`
 	Log          string `json:"log"`
 }
+
+type UserProfile struct {
+	UserStorage *UserStorageInfo
+	Vip         *VipInfo
+	AssetCount  *AssetCountInfo
+}
+
+type UserStorageInfo struct {
+	PeakBandwidth int64
+	TotalTraffic  int64
+	UsedTraffic   int64
+	TotalSize     int64
+	UsedSize      int64
+}
+
+type AssetCountInfo struct {
+	AreaCount      int64 `json:"area_count"`
+	CandidateCount int64 `json:"candidate_count"`
+	EdgeCount      int64 `json:"edge_count"`
+}

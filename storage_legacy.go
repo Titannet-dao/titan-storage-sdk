@@ -113,7 +113,7 @@ func (s *storage) uploadFileWithForm(ctx context.Context, r io.Reader, name, upl
 
 	ret.totalSize = int64(totalSize)
 
-	report.Cid = name
+	report.Cid = ret.Cid
 	report.State = client.AssetTransferStateSuccess
 
 	return &ret, nil

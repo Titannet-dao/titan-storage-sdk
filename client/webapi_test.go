@@ -23,7 +23,7 @@ func TestGetVip(t *testing.T) {
 func TestListAreaIDs(t *testing.T) {
 	webserver := NewWebserver(url, key, "")
 	// req := CreateAssetReq{}
-	webserver.LisgAreaIDs(context.Background())
+	webserver.ListAreaIDs(context.Background())
 }
 func TestCreateAsset(t *testing.T) {
 	webserver := NewWebserver(url, key, "")
@@ -99,7 +99,7 @@ func TestDeleteGroup(t *testing.T) {
 
 func TestListAssets(t *testing.T) {
 	webserver := NewWebserver(url, key, "")
-	rsp, err := webserver.ListAssets(context.Background(), 0, 20, 1)
+	rsp, err := webserver.ListAssets(context.Background(), 0, 20, 1, "", 0)
 	if err != nil {
 		fmt.Println(err)
 		return

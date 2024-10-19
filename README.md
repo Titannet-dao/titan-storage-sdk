@@ -80,7 +80,7 @@ func main() {
 	}
 	filePath := args[0]
 
-	storage, close, err := storage.NewStorage(titanURL, apiKey)
+	storage, close, err := storage.Initialize(titanURL, apiKey)
 	if err != nil {
 		fmt.Println("NewSchedulerAPI error ", err.Error())
 		return

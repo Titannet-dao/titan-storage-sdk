@@ -41,15 +41,15 @@ func init() {
 ### Go SDK Method With Client
 |Method|Description|
 |:-|:-|
-|TitanStorage.ListRegions|Retrieve the list of area IDs from the scheduler|
-|TitanStorage.CreateFolder|Create directories, including root and subdirectories|
-|TitanStorage.ListDirectoryContents|Retrieve a list of all folders and files|
-|TitanStorage.RenameFolder|Rename a specific folder|
-|TitanStorage.RenameAsset|Rename a specific file|
-|TitanStorage.DeleteFolder|Delete a specific folder|
-|TitanStorage.DeleteAsset|Delete a specific file|
-|TitanStorage.GetUserProfile|Retrieve user-related information|
-|TitanStorage.GetltemDetails|Get detailed information about files/folders|
-|TitanStorage.CreateSharedLink|Share file/folder data|
-|TitanStorage.UploadAsset|Upload files/folders|
-|TitanStorage.DownloadAsset|Download files/folders|
+|[TitanStorage.ListRegions](example/storage_test.go#L32)|Retrieve the list of area IDs from the scheduler|
+|[TitanStorage.CreateFolder](example/storage_test.go#L47)|Create directories, including root and subdirectories|
+|[TitanStorage.ListDirectoryContents](example/storage_test.go#L56)|Retrieve a list of all folders and files|
+|[TitanStorage.RenameFolder](example/storage_test.go#L67)|Rename a specific folder|
+|[TitanStorage.RenameAsset](example/storage_test.go#L76)|Rename a specific file|
+|[TitanStorage.DeleteFolder](example/storage_test.go#L85)|Delete a specific folder|
+|[TitanStorage.DeleteAsset](example/storage_test.go#L94)|Delete a specific file|
+|[TitanStorage.GetUserProfile](example/storage_test.go#174)|Retrieve user-related information|
+|[TitanStorage.GetltemDetails](example/storage_test.go#L103)|Get detailed information about files/folders|
+|[TitanStorage.CreateSharedLink](example/storage_test.go#L114)|Share file/folder data|
+|[TitanStorage.UploadAsset](example/storage_test.go#L126)|Upload files/folders|
+|[TitanStorage.DownloadAsset](example/storage_test.go#L149)|Download files/folders|

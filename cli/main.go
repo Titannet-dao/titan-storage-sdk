@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/cobra/doc"
 	storage "github.com/utopiosphe/titan-storage-sdk"
 )
 
@@ -383,6 +384,17 @@ var deleteGroupCmd = &cobra.Command{
 	},
 }
 
+var docCmd = &cobra.Command{
+	Use:   "gendoc",
+	Short: "Generate markdown documentation",
+	Run: func(cmd *cobra.Command, args []string) {
+		err := doc.GenMarkdownTree(rootCmd, "./")
+		if err != nil {
+			log.Fatal(err)
+		}
+	},
+}
+
 func init() {
 	uploadCmd.Flags().Bool("make-car", true, "make car")
 
@@ -410,11 +422,12 @@ func Execute() {
 	rootCmd.AddCommand(getFileCmd)
 	rootCmd.AddCommand(deleteFileCmd)
 	rootCmd.AddCommand(getURLCmd)
+	rootCmd.AddCommand(groupCmd)
+	rootCmd.AddCommand(docCmd)
 
 	groupCmd.AddCommand(createGroupCmd)
 	groupCmd.AddCommand(listGroupCmd)
 	groupCmd.AddCommand(deleteGroupCmd)
-	rootCmd.AddCommand(groupCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
