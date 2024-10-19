@@ -60,9 +60,9 @@ var uploadCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		s, err := storage.NewStorage(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
+		s, err := storage.Initialize(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
 		if err != nil {
-			log.Fatal("NewStorage error ", err)
+			log.Fatal("Initialize error ", err)
 		}
 
 		s.SetAreas(context.Background(), []string{getAreaIDFromEnv()})
@@ -107,9 +107,9 @@ var listFilesCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		s, err := storage.NewStorage(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
+		s, err := storage.Initialize(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
 		if err != nil {
-			log.Fatal("NewStorage error ", err)
+			log.Fatal("Initialize error ", err)
 		}
 
 		rets, err := s.ListUserAssets(context.Background(), groupID, pageSize, page)
@@ -163,9 +163,9 @@ var getFileCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		s, err := storage.NewStorage(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
+		s, err := storage.Initialize(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
 		if err != nil {
-			log.Fatal("NewStorage error ", err)
+			log.Fatal("Initialize error ", err)
 		}
 
 		reader, _, err := s.GetFileWithCid(context.Background(), cid)
@@ -225,9 +225,9 @@ var deleteFileCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		s, err := storage.NewStorage(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
+		s, err := storage.Initialize(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
 		if err != nil {
-			log.Fatal("NewStorage error ", err)
+			log.Fatal("Initialize error ", err)
 		}
 
 		err = s.Delete(context.Background(), rootCID)
@@ -255,9 +255,9 @@ var getURLCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		s, err := storage.NewStorage(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
+		s, err := storage.Initialize(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
 		if err != nil {
-			log.Fatal("NewStorage error ", err)
+			log.Fatal("Initialize error ", err)
 		}
 
 		url, err := s.GetURL(context.Background(), rootCID)
@@ -288,9 +288,9 @@ var createGroupCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		s, err := storage.NewStorage(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
+		s, err := storage.Initialize(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
 		if err != nil {
-			log.Fatal("NewStorage error ", err)
+			log.Fatal("Initialize error ", err)
 		}
 
 		err = s.CreateGroup(cmd.Context(), name, parentID)
@@ -319,9 +319,9 @@ var listGroupCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		s, err := storage.NewStorage(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
+		s, err := storage.Initialize(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
 		if err != nil {
-			log.Fatal("NewStorage error ", err)
+			log.Fatal("Initialize error ", err)
 		}
 
 		rsp, err := s.ListGroups(cmd.Context(), parentID, count, start)
@@ -371,9 +371,9 @@ var deleteGroupCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		s, err := storage.NewStorage(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
+		s, err := storage.Initialize(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
 		if err != nil {
-			log.Fatal("NewStorage error ", err)
+			log.Fatal("Initialize error ", err)
 		}
 
 		err = s.DeleteGroup(cmd.Context(), parentID)

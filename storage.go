@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -154,8 +155,8 @@ type Config struct {
 
 var TitanAreas []string
 
-// NewStorage creates a new Storage instance
-func NewStorage(cfg *Config) (Storage, error) {
+// Initialize creates a new Storage instance
+func Initialize(cfg *Config) (Storage, error) {
 	if len(cfg.TitanURL) == 0 {
 		return nil, fmt.Errorf("TitanURL can not empty")
 	}
@@ -255,7 +256,10 @@ func (s *storage) GetItemDetails(ctx context.Context, assetCID string, folderID 
 
 // CreateSharedLink Share file/folder data
 func (s *storage) CreateSharedLink(ctx context.Context, assetCID string, folderID int) (string, error) {
-	return "", nil
+	if folderID > 0 {
+		return "", errors.New("not implemented yet")
+	}
+
 }
 
 // UploadAsset Upload files/folders
