@@ -242,7 +242,7 @@ var deleteFileCmd = &cobra.Command{
 
 var getURLCmd = &cobra.Command{
 	Use:     "url",
-	Short:   "get file ur",
+	Short:   "get file url by cid",
 	Example: "url your-file-cid",
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) == 0 {
@@ -270,12 +270,12 @@ var getURLCmd = &cobra.Command{
 	},
 }
 
-var groupCmd = &cobra.Command{
-	Use:   "group",
-	Short: "Manage groups",
+var folderCmd = &cobra.Command{
+	Use:   "folder",
+	Short: "Manage folders",
 }
 
-var createGroupCmd = &cobra.Command{
+var createFolderCmd = &cobra.Command{
 	Use:   "create",
 	Short: "create --name abc --pid 0",
 	Run: func(cmd *cobra.Command, args []string) {
@@ -302,7 +302,7 @@ var createGroupCmd = &cobra.Command{
 	},
 }
 
-var listGroupCmd = &cobra.Command{
+var listFolderCmd = &cobra.Command{
 	Use:   "list",
 	Short: "list --parentID 0 -s 0 -e 20",
 	Run: func(cmd *cobra.Command, args []string) {
@@ -361,11 +361,11 @@ var listGroupCmd = &cobra.Command{
 	},
 }
 
-var deleteGroupCmd = &cobra.Command{
+var deleteFolderCmd = &cobra.Command{
 	Use:   "delete",
 	Short: "Delete a group",
 	Run: func(cmd *cobra.Command, args []string) {
-		parentID, _ := cmd.Flags().GetInt("groupID")
+		parentID, _ := cmd.Flags().GetInt("folderID")
 
 		titanURL, apiKey, err := getTitanURLAndAPIKeyFromEnv()
 		if err != nil {
@@ -405,14 +405,14 @@ func init() {
 	getFileCmd.Flags().String("cid", "", "the cid of file")
 	getFileCmd.Flags().String("out", "", "the path to save file")
 
-	createGroupCmd.Flags().StringP("name", "n", "", "special the name for group")
-	createGroupCmd.Flags().Int("parentID", 0, "special the parent for group")
+	createFolderCmd.Flags().StringP("name", "n", "", "special the name for group")
+	createFolderCmd.Flags().Int("parentID", 0, "special the parent for group")
 
-	listGroupCmd.Flags().Int("parentID", 0, "special the parent for group")
-	listGroupCmd.Flags().IntP("start", "s", 0, "special the start for list")
-	listGroupCmd.Flags().IntP("end", "e", 20, "special the end for list")
+	listFolderCmd.Flags().Int("parentID", 0, "special the parent for group")
+	listFolderCmd.Flags().IntP("start", "s", 0, "special the start for list")
+	listFolderCmd.Flags().IntP("end", "e", 20, "special the end for list")
 
-	deleteGroupCmd.Flags().Int("groupID", 0, "special the group id")
+	deleteFolderCmd.Flags().Int("groupID", 0, "special the group id")
 }
 
 func Execute() {
@@ -422,12 +422,12 @@ func Execute() {
 	rootCmd.AddCommand(getFileCmd)
 	rootCmd.AddCommand(deleteFileCmd)
 	rootCmd.AddCommand(getURLCmd)
-	rootCmd.AddCommand(groupCmd)
+	rootCmd.AddCommand(folderCmd)
 	rootCmd.AddCommand(docCmd)
 
-	groupCmd.AddCommand(createGroupCmd)
-	groupCmd.AddCommand(listGroupCmd)
-	groupCmd.AddCommand(deleteGroupCmd)
+	folderCmd.AddCommand(createFolderCmd)
+	folderCmd.AddCommand(listFolderCmd)
+	folderCmd.AddCommand(deleteFolderCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)

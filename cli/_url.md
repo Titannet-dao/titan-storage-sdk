@@ -1,6 +1,6 @@
 ##  url
 
-get file ur
+get file url by cid
 
 ```
  url [flags]
