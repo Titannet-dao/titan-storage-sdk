@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io"
 
-	storage "github.com/utopiosphe/titan-storage-sdk"
+	storage "github.com/Titannet-dao/titan-storage-sdk"
 )
 
 type ProgressHandler interface {

@@ -8,9 +8,9 @@ import (
 	"os"
 	"time"
 
+	storage "github.com/Titannet-dao/titan-storage-sdk"
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
-	storage "github.com/utopiosphe/titan-storage-sdk"
 )
 
 func getTitanURLAndAPIKeyFromEnv() (string, string, error) {

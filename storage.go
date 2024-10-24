@@ -15,8 +15,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/utopiosphe/titan-storage-sdk/client"
-	byterange "github.com/utopiosphe/titan-storage-sdk/range"
+	"github.com/Titannet-dao/titan-storage-sdk/client"
+	byterange "github.com/Titannet-dao/titan-storage-sdk/range"
 
 	"github.com/ipfs/go-cid"
 )

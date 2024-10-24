@@ -8,7 +8,7 @@ import (
 	"os"
 	"testing"
 
-	storage "github.com/utopiosphe/titan-storage-sdk"
+	storage "github.com/Titannet-dao/titan-storage-sdk"
 )
 
 const (

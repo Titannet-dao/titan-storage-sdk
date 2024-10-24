@@ -9,7 +9,7 @@ Titan Storage is an advanced cloud storage application, integrating a visual int
 ###  Installation
 To use the titan storage sdk, you'll first need to install Go and set up a Go development environment. Once you have Go installed and configured, you can install the titan storage sdk using Go modules:
 
-	go get github.com/utopiosphe/titan-storage-sdk
+	go get github.com/Titannet-dao/titan-storage-sdk
 
 ### API 
 	SSOLogin(ctx context.Context, req SubUserInfo) (*SSOLoginRsp, error)
@@ -27,7 +27,7 @@ import (
 	"fmt"
 	"os"
 
-	storage "github.com/utopiosphe/titan-storage-sdk"
+	storage "github.com/Titannet-dao/titan-storage-sdk"
 )
 
 func main() {

@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/utopiosphe/titan-storage-sdk/client"
+	"github.com/Titannet-dao/titan-storage-sdk/client"
 )
 
 type Tenant interface {

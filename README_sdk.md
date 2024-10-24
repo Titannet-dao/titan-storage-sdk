@@ -5,7 +5,7 @@ The Go SDK consists of TitanStorage.
 
 ### Install Go SDK And initialize the go SDK
 ```bash
-go get -u github.com/utopiosphe/titan-storage-sdk
+go get -u github.com/Titannet-dao/titan-storage-sdk
 ```
 
 Retrieve the apikey and use it to initialize the go SDK
@@ -16,7 +16,7 @@ Retrieve the apikey and use it to initialize the go SDK
 package main
 
 import (
-    storage "github.com/utopiosphe/titan-storage-sdk"
+    storage "github.com/Titannet-dao/titan-storage-sdk"
 )
 
 const (

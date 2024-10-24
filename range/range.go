@@ -12,10 +12,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Titannet-dao/titan-storage-sdk/client"
+	"github.com/Titannet-dao/titan-storage-sdk/request"
 	"github.com/eikenb/pipeat"
 	logging "github.com/ipfs/go-log"
-	"github.com/utopiosphe/titan-storage-sdk/client"
-	"github.com/utopiosphe/titan-storage-sdk/request"
 )
 
 const (

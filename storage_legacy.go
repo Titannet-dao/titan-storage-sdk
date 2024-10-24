@@ -15,10 +15,10 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/Titannet-dao/titan-storage-sdk/client"
+	"github.com/Titannet-dao/titan-storage-sdk/memfile"
+	byterange "github.com/Titannet-dao/titan-storage-sdk/range"
 	"github.com/ipfs/go-cid"
-	"github.com/utopiosphe/titan-storage-sdk/client"
-	"github.com/utopiosphe/titan-storage-sdk/memfile"
-	byterange "github.com/utopiosphe/titan-storage-sdk/range"
 )
 
 // uploadFileWithForm uploads a file using a multipart form
