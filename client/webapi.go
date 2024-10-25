@@ -1,181 +1,26 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"time"
+
+	"github.com/ipfs/go-cid"
 )
 
 const isAssetAlreadyExist = 1017
 
-type JWTPayload struct {
-	// role base access controller permission
-	Allow []string
-	ID    string
-	// TODO remove NodeID later, any role id replace as ID
-	NodeID string
-	// Extend is json string
-	Extend string
-	// The sub permission of user
-	AccessControlList []string
-}
+const (
+	AssetTransferTypeUpload   = "upload"
+	AssetTransferTypeDownload = "download"
 
-// AssetProperty represents the properties of an asset.
-type AssetProperty struct {
-	AssetCID  string
-	AssetName string
-	AssetSize int64
-	AssetType string
-	NodeID    string
-	GroupID   int
-}
-
-type CreateAssetReq struct {
-	// UserID string
-	AreaID string
-	AssetProperty
-}
-
-// CreateAssetRsp represents the response when creating an asset.
-type Endpoint struct {
-	CandidateAddr string
-	Token         string
-	AlreadyExists bool
-}
-
-type CreateAssetRsp struct {
-	IsAlreadyExist bool
-	Endpoints      []*Endpoint
-}
-
-// CandidateIPInfo represents information about a candidate IP.
-type CandidateIPInfo struct {
-	NodeID      string
-	IP          string
-	ExternalURL string
-}
-
-// ReplicaInfo represents information about a replica.
-type ReplicaInfo struct {
-	Hash        string
-	NodeID      string
-	Status      int
-	IsCandidate bool
-	EndTime     time.Time
-	DoneSize    int64
-}
-
-// AssetRecord represents information about an asset record.
-type AssetRecord struct {
-	CID                   string
-	Hash                  string
-	NeedEdgeReplica       int64
-	TotalSize             int64
-	TotalBlocks           int64
-	Expiration            time.Time
-	CreatedTime           time.Time
-	EndTime               time.Time
-	NeedCandidateReplicas int64
-	ServerID              string
-	State                 string
-	NeedBandwidth         int64
-
-	RetryCount        int64
-	ReplenishReplicas int64
-	ReplicaInfos      []*ReplicaInfo
-
-	SPCount int64
-}
-
-// UserAssetDetail represents detailed information about a user's asset.
-type UserAssetDetail struct {
-	UserID      string
-	Hash        string
-	AssetName   string
-	AssetType   string
-	ShareStatus int64
-	Expiration  time.Time
-	CreatedTime time.Time
-	TotalSize   int64
-}
-
-// AssetOverview represents an overview of an asset.
-type AssetOverview struct {
-	AssetRecord      *AssetRecord
-	UserAssetDetail  *UserAssetDetail
-	VisitCount       int
-	RemainVisitCount int
-}
-
-// ListAssetRecordRsp represents the response when listing asset records.
-type ListAssetRecordRsp struct {
-	Total          int
-	AssetOverviews []*AssetOverview
-}
-
-// AssetGroup user asset group
-type AssetGroup struct {
-	ID          int
-	UserID      string
-	Name        string
-	Parent      int
-	AssetCount  int
-	AssetSize   int64
-	CreatedTime time.Time
-}
-
-// ListAssetGroupRsp list  asset group records
-type ListAssetGroupRsp struct {
-	Total       int           `json:"total"`
-	AssetGroups []*AssetGroup `json:"list"`
-}
-
-// UserAssetSummary user asset and group
-type UserAssetSummary struct {
-	AssetOverview *AssetOverview
-	AssetGroup    *AssetGroup
-}
-
-// ListAssetSummaryRsp list asset and group
-type ListAssetSummaryRsp struct {
-	Total int                 `json:"total"`
-	List  []*UserAssetSummary `json:"list"`
-}
-
-type UploadInfo struct {
-	List          []*NodeUploadInfo
-	AlreadyExists bool
-}
-
-type NodeUploadInfo struct {
-	UploadURL string
-	Token     string
-	NodeID    string
-}
-
-type VipInfo struct {
-	UserID string `json:"uid"`
-	VIP    bool   `json:"vip"`
-}
-
-type ShareAssetResult struct {
-	AssetCID string   `json:"asset_cid"`
-	Redirect bool     `json:"redirect"`
-	Size     int64    `json:"size"`
-	URLs     []string `json:"url"`
-	FileName string
-}
-
-type Result struct {
-	Code int    `json:"code"`
-	Err  int    `json:"err"`
-	Msg  string `json:"msg"`
-	Data interface{}
-}
+	AssetTransferStateSuccess = 1
+	AssetTransferStateFailed  = 2
+)
 
 // Webserver defines the interface for the scheduler.
 type Webserver interface {
@@ -183,8 +28,8 @@ type Webserver interface {
 	// AuthVerify(ctx context.Context, token string) (*JWTPayload, error)
 	// GetVipInfo() (string, error)
 	GetVipInfo(ctx context.Context) (*VipInfo, error)
-	// LisgAreaIDs list all area id
-	LisgAreaIDs(ctx context.Context) ([]string, error)
+	// ListAreaIDs list all area id
+	ListAreaIDs(ctx context.Context) ([]string, error)
 	// CreateAsset creates an asset with car CID, car name, and car size.
 	CreateAsset(ctx context.Context, req *CreateAssetReq) (*CreateAssetRsp, error)
 	// DeleteAsset deletes the asset of the user.
@@ -194,7 +39,9 @@ type Webserver interface {
 	// GetCandidateIPs retrieves information about candidate IPs.
 	GetCandidateIPs(ctx context.Context) ([]*CandidateIPInfo, error)
 	// ListAssets lists the assets of the user.
-	ListAssets(ctx context.Context, parent, pageSize, page int) (*ListAssetRecordRsp, error)
+	ListAssets(ctx context.Context, parent, pageSize, page int, cid string, folderID int) (*ListAssetRecordRsp, error)
+	// RenameAsset Rename a specific file
+	RenameAsset(ctx context.Context, assetCID string, newName string) error
 
 	// CreateGroup create Asset group
 	CreateGroup(ctx context.Context, name string, parent int) (*AssetGroup, error)
@@ -212,23 +59,32 @@ type Webserver interface {
 	MoveAssetGroup(ctx context.Context, userID string, groupID, targetGroupID int) error
 	// GetAPPKeyPermissions get the permissions of user app key
 	GetAPPKeyPermissions(ctx context.Context, userID, keyName string) ([]string, error)
-
 	// GetNodeUploadInfo
-	GetNodeUploadInfo(ctx context.Context, userID string) (*UploadInfo, error)
+	GetNodeUploadInfo(ctx context.Context, userID, area string, urlMode bool) (*UploadInfo, error)
+	// AssetTransferReport
+	AssetTransferReport(ctx context.Context, req AssetTransferReq) error
+
+	// GetUserStorage
+	GetUserStorage(ctx context.Context) (*UserStorageInfo, error)
+
+	// GetAssetCount
+	GetAssetCount(ctx context.Context) (*AssetCountInfo, error)
 }
 
 var _ Webserver = (*webserver)(nil)
 
 // NewWebserver creates a new Scheduler instance with the specified URL, headers, and options.
-func NewWebserver(url string, apiKey string) Webserver {
-	return &webserver{url: url, apiKey: apiKey, client: http.DefaultClient}
+func NewWebserver(url string, apiKey, token string) Webserver {
+	return &webserver{url: url, apiKey: apiKey, token: token, client: http.DefaultClient}
 }
 
 type webserver struct {
 	// client *Client
 	url    string
-	apiKey string
 	client *http.Client
+
+	apiKey string
+	token  string
 }
 
 func (s *webserver) GetVipInfo(ctx context.Context) (*VipInfo, error) {
@@ -238,7 +94,7 @@ func (s *webserver) GetVipInfo(ctx context.Context) (*VipInfo, error) {
 		return nil, err
 	}
 
-	req.Header.Set("apikey", s.apiKey)
+	s.setCredential(req)
 
 	rsp, err := s.client.Do(req)
 	if err != nil {
@@ -274,14 +130,24 @@ func (s *webserver) GetVipInfo(ctx context.Context) (*VipInfo, error) {
 	return vipInfo, nil
 }
 
-func (s *webserver) LisgAreaIDs(ctx context.Context) ([]string, error) {
+type ListAreaID struct {
+	AreaMaps []AreaInfo `json:"area_maps"`
+	List     []string   `json:"list"`
+}
+
+type AreaInfo struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
+func (s *webserver) ListAreaIDs(ctx context.Context) ([]string, error) {
 	url := fmt.Sprintf("%s/api/v1/storage/get_area_id", s.url)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	req.Header.Set("apikey", s.apiKey)
+	s.setCredential(req)
 
 	rsp, err := s.client.Do(req)
 	if err != nil {
@@ -308,21 +174,57 @@ func (s *webserver) LisgAreaIDs(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf(fmt.Sprintf("code: %d, err: %d, msg: %s", ret.Code, ret.Err, ret.Msg))
 	}
 
-	fmt.Println("body ", string(body))
-	return nil, nil
-}
-
-// CreateUserAsset creates a new user asset.
-func (s *webserver) CreateAsset(ctx context.Context, caReq *CreateAssetReq) (*CreateAssetRsp, error) {
-	url := fmt.Sprintf("%s/api/v1/storage/create_asset?area_id=%s&asset_name=%s&asset_cid=%s&node_id=%s&asset_type=%s&asset_size=%d&group_id=%d",
-		s.url, caReq.AreaID, caReq.AssetName, caReq.AssetCID, caReq.NodeID, caReq.AssetType, caReq.AssetSize, caReq.GroupID)
-	fmt.Println("url: ", url)
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	var listAreas = &ListAreaID{}
+	err = interfaceToStruct(ret.Data, listAreas)
 	if err != nil {
 		return nil, err
 	}
 
-	req.Header.Set("apikey", s.apiKey)
+	// fmt.Println("body ", string(body))
+	return listAreas.List, nil
+}
+
+type webCreateAssetReq struct {
+	AssetName string   `json:"asset_name"`
+	AssetCID  string   `json:"asset_cid"`
+	AreaID    []string `json:"area_id"`
+	NodeID    string   `json:"node_id"`
+	AssetType string   `json:"asset_type"`
+	AssetSize int64    `json:"asset_size"`
+	GroupID   int64    `json:"group_id"`
+	Encrypted bool     `json:"encrypted"`
+	NeedTrace bool     `json:"need_trace"`
+}
+
+// CreateUserAsset creates a new user asset.
+func (s *webserver) CreateAsset(ctx context.Context, caReq *CreateAssetReq) (*CreateAssetRsp, error) {
+	uploadUrl := fmt.Sprintf("%s/api/v1/storage/create_asset", s.url)
+	// uploadUrl := fmt.Sprintf("%s/api/v1/storage/create_asset?area_id=%s&asset_name=%s&asset_cid=%s&node_id=%s&asset_type=%s&asset_size=%d&group_id=%d",
+	// 	s.url, caReq.AreaID, neturl.QueryEscape(caReq.AssetName), caReq.AssetCID, caReq.NodeID, caReq.AssetType, caReq.AssetSize, caReq.GroupID)
+
+	postData := webCreateAssetReq{
+		AssetName: caReq.AssetName,
+		AssetCID:  caReq.AssetCID,
+		AreaID:    caReq.AreaIDs,
+		NodeID:    caReq.NodeID,
+		AssetType: caReq.AssetType,
+		AssetSize: caReq.AssetSize,
+		GroupID:   int64(caReq.GroupID),
+	}
+
+	jsonBytes, err := json.Marshal(postData)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println("url: ", uploadUrl, "data: ", string(jsonBytes))
+
+	req, err := http.NewRequestWithContext(ctx, "POST", uploadUrl, bytes.NewBuffer(jsonBytes))
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	s.setCredential(req)
 
 	rsp, err := s.client.Do(req)
 	if err != nil {
@@ -358,18 +260,19 @@ func (s *webserver) CreateAsset(ctx context.Context, caReq *CreateAssetReq) (*Cr
 		return nil, err
 	}
 	// fmt.Println("body ", string(body))
-	return &CreateAssetRsp{IsAlreadyExist: false, Endpoints: endpoints}, nil
+	return &CreateAssetRsp{IsAlreadyExist: len(endpoints) == 0, Endpoints: endpoints}, nil
 }
 
 // DeleteAsset deletes a user asset.
 func (s *webserver) DeleteAsset(ctx context.Context, userID, assetCID string) error {
 	url := fmt.Sprintf("%s/api/v1/storage/delete_asset?user_id=%s&asset_cid=%s", s.url, userID, assetCID)
+
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return err
 	}
 
-	req.Header.Set("apikey", s.apiKey)
+	s.setCredential(req)
 
 	rsp, err := s.client.Do(req)
 	if err != nil {
@@ -401,13 +304,13 @@ func (s *webserver) DeleteAsset(ctx context.Context, userID, assetCID string) er
 
 // ShareAsset shares user assets.
 func (s *webserver) ShareAsset(ctx context.Context, userID, areaID, assetCID string) (*ShareAssetResult, error) {
-	url := fmt.Sprintf("%s/api/v1/storage/share_asset?user_id=%s&area_id=%s&asset_cid=%s", s.url, userID, areaID, assetCID)
+	url := fmt.Sprintf("%s/api/v1/storage/share_asset?user_id=%s&area_id=%s&asset_cid=%s&need_trace=true", s.url, userID, areaID, assetCID)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	req.Header.Set("apikey", s.apiKey)
+	s.setCredential(req)
 
 	rsp, err := s.client.Do(req)
 	if err != nil {
@@ -449,14 +352,20 @@ func (s *webserver) GetCandidateIPs(ctx context.Context) ([]*CandidateIPInfo, er
 }
 
 // ListAssets lists user assets.
-func (s *webserver) ListAssets(ctx context.Context, parent, pageSize, page int) (*ListAssetRecordRsp, error) {
+func (s *webserver) ListAssets(ctx context.Context, parent, pageSize, page int, cid string, folderID int) (*ListAssetRecordRsp, error) {
 	url := fmt.Sprintf("%s/api/v1/storage/get_asset_group_list?parent=%d&page_size=%d&page=%d", s.url, parent, pageSize, page)
+	if cid != "" {
+		url += fmt.Sprintf("&cid=%s", cid)
+	}
+	if folderID > 0 {
+		url += fmt.Sprintf("&groupid=%d", folderID)
+	}
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		log.Fatalf("Error creating request: %v", err)
 	}
 
-	req.Header.Set("apikey", s.apiKey)
+	s.setCredential(req)
 
 	rsp, err := s.client.Do(req)
 	if err != nil {
@@ -508,6 +417,61 @@ func (s *webserver) ListAssets(ctx context.Context, parent, pageSize, page int) 
 	return &ListAssetRecordRsp{Total: data.Total, AssetOverviews: assetOverviews}, nil
 }
 
+// RenameAssetReq 重命名文件请求
+type RenameAssetReq struct {
+	AssetCID string `json:"asset_cid"`
+	NewName  string `json:"new_name"`
+	// GroupID  int    `json:"group_id"`
+}
+
+// RenameAsset Rename a specific file
+func (s *webserver) RenameAsset(ctx context.Context, assetCID string, newName string) error {
+	url := fmt.Sprintf("%s/api/v1/storage/rename_asset", s.url)
+
+	renameAssetReq := &RenameAssetReq{
+		AssetCID: assetCID,
+		NewName:  newName,
+	}
+
+	jsonBytes, err := json.Marshal(renameAssetReq)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBytes))
+	if err != nil {
+		log.Fatalf("Error creating request: %v", err)
+	}
+
+	s.setCredential(req)
+
+	rsp, err := s.client.Do(req)
+	if err != nil {
+		return err
+	}
+
+	if rsp.StatusCode != http.StatusOK {
+		buf, _ := io.ReadAll(rsp.Body)
+		return fmt.Errorf("status code %d %s", rsp.StatusCode, string(buf))
+	}
+
+	body, err := io.ReadAll(rsp.Body)
+	if err != nil {
+		return err
+	}
+
+	ret := &Result{}
+	err = json.Unmarshal(body, ret)
+	if err != nil {
+		return err
+	}
+
+	if ret.Code != 0 {
+		return fmt.Errorf(fmt.Sprintf("code: %d, err: %d, msg: %s", ret.Code, ret.Err, ret.Msg))
+	}
+	return nil
+}
+
 // CreateGroup create a group
 func (s *webserver) CreateGroup(ctx context.Context, name string, parent int) (*AssetGroup, error) {
 	url := fmt.Sprintf("%s/api/v1/storage/create_group?&name=%s&parent=%d", s.url, name, parent)
@@ -516,7 +480,7 @@ func (s *webserver) CreateGroup(ctx context.Context, name string, parent int) (*
 		return nil, err
 	}
 
-	req.Header.Set("apikey", s.apiKey)
+	s.setCredential(req)
 
 	rsp, err := s.client.Do(req)
 	if err != nil {
@@ -562,7 +526,7 @@ func (s *webserver) ListGroups(ctx context.Context, parent, pageSize, page int) 
 		log.Fatalf("Error creating request: %v", err)
 	}
 
-	req.Header.Set("apikey", s.apiKey)
+	s.setCredential(req)
 
 	rsp, err := s.client.Do(req)
 	if err != nil {
@@ -610,7 +574,7 @@ func (s *webserver) DeleteGroup(ctx context.Context, userID string, gid int) err
 		log.Fatalf("Error creating request: %v", err)
 	}
 
-	req.Header.Set("apikey", s.apiKey)
+	s.setCredential(req)
 
 	rsp, err := s.client.Do(req)
 	if err != nil {
@@ -660,14 +624,23 @@ func (s *webserver) GetAPPKeyPermissions(ctx context.Context, userID, keyName st
 }
 
 // GetNodeUploadInfo
-func (s *webserver) GetNodeUploadInfo(ctx context.Context, userID string) (*UploadInfo, error) {
-	url := fmt.Sprintf("%s/api/v1/storage/get_upload_info?encrypted=false", s.url)
+func (s *webserver) GetNodeUploadInfo(ctx context.Context, userID, area string, urlMode bool) (*UploadInfo, error) {
+	url := fmt.Sprintf("%s/api/v1/storage/get_upload_info?encrypted=false&need_trace=true", s.url)
+	if urlMode {
+		url += "&urlMode=true"
+	}
+	if area != "" {
+		url += fmt.Sprintf("&area_id=%s", area)
+	}
+
+	// fmt.Println("GetUploadInfo url: ", url)
+
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	req.Header.Set("apikey", s.apiKey)
+	s.setCredential(req)
 
 	rsp, err := s.client.Do(req)
 	if err != nil {
@@ -703,6 +676,173 @@ func (s *webserver) GetNodeUploadInfo(ctx context.Context, userID string) (*Uplo
 	return uploadNodes, nil
 }
 
+// AssetTransferReport
+func (s *webserver) AssetTransferReport(ctx context.Context, req AssetTransferReq) error {
+	reportUrl := fmt.Sprintf("%s/api/v1/storage/transfer/report", s.url)
+
+	if req.Cid != "" {
+		hash, err := CIDToHash(req.Cid)
+		if err != nil {
+			return err
+		}
+
+		req.Hash = hash
+	}
+
+	// postData := AssetTransferReq{
+	// 	Cid:          cid,
+	// 	Hash:         hash,
+	// 	CostMs:       cost,
+	// 	TotalSize:    totalSize,
+	// 	Succeed:      succeed,
+	// 	TransferType: transferType,
+	// }
+
+	if req.State == AssetTransferStateSuccess {
+		// bytes per second
+		req.Rate = req.TotalSize / req.CostMs * 1000
+	}
+
+	jsonBytes, err := json.Marshal(req)
+	if err != nil {
+		return err
+	}
+
+	request, err := http.NewRequestWithContext(ctx, "POST", reportUrl, bytes.NewBuffer(jsonBytes))
+	if err != nil {
+		return err
+	}
+
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("apikey", s.apiKey)
+
+	rsp, err := s.client.Do(request)
+	if err != nil {
+		return err
+	}
+
+	if rsp.StatusCode != http.StatusOK {
+		buf, _ := io.ReadAll(rsp.Body)
+		return fmt.Errorf("status code %d, %s", rsp.StatusCode, string(buf))
+	}
+
+	body, err := io.ReadAll(rsp.Body)
+	if err != nil {
+		return err
+	}
+
+	ret := &Result{}
+	err = json.Unmarshal(body, ret)
+	if err != nil {
+		return err
+	}
+
+	if ret.Code != 0 {
+		return fmt.Errorf(fmt.Sprintf("code: %d, err: %d, msg: %s", ret.Code, ret.Err, ret.Msg))
+	}
+
+	return nil
+}
+
+// GetUserStorage
+func (s *webserver) GetUserStorage(ctx context.Context) (*UserStorageInfo, error) {
+	url := fmt.Sprintf("%s/api/v1/storage/get_storage_size", s.url)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	s.setCredential(req)
+
+	rsp, err := s.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if rsp.StatusCode != http.StatusOK {
+		buf, _ := io.ReadAll(rsp.Body)
+		return nil, fmt.Errorf("status code %d %s", rsp.StatusCode, string(buf))
+	}
+
+	body, err := io.ReadAll(rsp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	ret := &Result{}
+	err = json.Unmarshal(body, ret)
+	if err != nil {
+		return nil, err
+	}
+
+	if ret.Code != 0 {
+		return nil, fmt.Errorf(fmt.Sprintf("code: %d, err: %d, msg: %s", ret.Code, ret.Err, ret.Msg))
+	}
+
+	storageInfo := &UserStorageInfo{}
+	err = interfaceToStruct(ret.Data, storageInfo)
+	if err != nil {
+		return nil, err
+	}
+
+	return storageInfo, nil
+}
+
+// GetAssetCount
+func (s *webserver) GetAssetCount(ctx context.Context) (*AssetCountInfo, error) {
+	url := fmt.Sprintf("%s/api/v1/storage/get_asset_count", s.url)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	s.setCredential(req)
+
+	rsp, err := s.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if rsp.StatusCode != http.StatusOK {
+		buf, _ := io.ReadAll(rsp.Body)
+		return nil, fmt.Errorf("status code %d %s", rsp.StatusCode, string(buf))
+	}
+
+	body, err := io.ReadAll(rsp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	ret := &Result{}
+	err = json.Unmarshal(body, ret)
+	if err != nil {
+		return nil, err
+	}
+
+	if ret.Code != 0 {
+		return nil, fmt.Errorf(fmt.Sprintf("code: %d, err: %d, msg: %s", ret.Code, ret.Err, ret.Msg))
+	}
+
+	assetCount := &AssetCountInfo{}
+	err = interfaceToStruct(ret.Data, assetCount)
+	if err != nil {
+		return nil, err
+	}
+
+	return assetCount, nil
+}
+
+func (s *webserver) setCredential(r *http.Request) {
+	if s.apiKey != "" {
+		r.Header.Set("apikey", s.apiKey)
+	}
+	if s.token != "" {
+		r.Header.Set("jwtauthorization", fmt.Sprintf("Bearer %s", s.token))
+	}
+}
+
 func interfaceToStruct(input interface{}, output interface{}) error {
 	buf, err := json.Marshal(input)
 	if err != nil {
@@ -713,4 +853,14 @@ func interfaceToStruct(input interface{}, output interface{}) error {
 		return err
 	}
 	return nil
+}
+
+// CIDToHash converts a CID string to its corresponding hash string.
+func CIDToHash(cidString string) (string, error) {
+	cid, err := cid.Decode(cidString)
+	if err != nil {
+		return "", err
+	}
+
+	return cid.Hash().String(), nil
 }
