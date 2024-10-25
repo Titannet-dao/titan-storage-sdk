@@ -62,7 +62,7 @@ func TestCreateCarWithStream(t *testing.T) {
 }
 
 func TestUpload(t *testing.T) {
-	storage, err := NewStorage(&Config{TitanURL: locatorURL, APIKey: apiKey})
+	storage, err := Initialize(&Config{TitanURL: locatorURL, APIKey: apiKey})
 	if err != nil {
 		t.Fatal("NewStorage error ", err)
 	}
@@ -107,7 +107,7 @@ func TestUpload(t *testing.T) {
 }
 
 func TestUploadStream(t *testing.T) {
-	storage, err := NewStorage(&Config{TitanURL: locatorURL, APIKey: apiKey})
+	storage, err := Initialize(&Config{TitanURL: locatorURL, APIKey: apiKey})
 	if err != nil {
 		t.Fatal("NewStorage error ", err)
 	}
@@ -132,7 +132,7 @@ func TestUploadStream(t *testing.T) {
 }
 
 func TestGetFile(t *testing.T) {
-	s, err := NewStorage(&Config{TitanURL: locatorURL, APIKey: apiKey})
+	s, err := Initialize(&Config{TitanURL: locatorURL, APIKey: apiKey})
 	if err != nil {
 		t.Fatal("NewStorage error ", err)
 	}
@@ -187,7 +187,7 @@ func TestGetFile(t *testing.T) {
 }
 
 func TestUploadFileWithURL(t *testing.T) {
-	s, err := NewStorage(&Config{TitanURL: locatorURL, APIKey: apiKey})
+	s, err := Initialize(&Config{TitanURL: locatorURL, APIKey: apiKey})
 	if err != nil {
 		t.Fatal("NewStorage error ", err)
 	}
@@ -212,7 +212,7 @@ func TestUploadFileWithURL(t *testing.T) {
 }
 
 func TestListAsset(t *testing.T) {
-	s, err := NewStorage(&Config{TitanURL: locatorURL, APIKey: apiKey})
+	s, err := Initialize(&Config{TitanURL: locatorURL, APIKey: apiKey})
 	if err != nil {
 		t.Fatal("NewStorage error ", err)
 	}

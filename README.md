@@ -9,7 +9,7 @@ The test example implements file uploading, listing files that have been uploade
 ![Alt text](doc/20231113173719.png)
 
 ### 2 Build example
-    git clone github.com/Filecoin-Titan/titan-storage-sdk.git
+    git clone github.com/Titannet-dao/titan-storage-sdk.git
     cd /titan-storage-sdk/example
     go build
 
@@ -35,7 +35,7 @@ The test example implements file uploading, listing files that have been uploade
 ###  Installation
 To use the titan storage sdk, you'll first need to install Go and set up a Go development environment. Once you have Go installed and configured, you can install the titan storage sdk using Go modules:
 
-	go get github.com/Filecoin-Titan/titan-storage-sdk
+	go get github.com/Titannet-dao/titan-storage-sdk
 
 ### API 
 	UploadFilesWithPath(ctx context.Context, filePath string, progress ProgressFunc) (cid.Cid, error)
@@ -55,7 +55,7 @@ import (
 	"fmt"
 	"os"
 
-	storage "github.com/Filecoin-Titan/titan-storage-sdk"
+	storage "github.com/Titannet-dao/titan-storage-sdk"
 )
 
 func main() {
@@ -80,7 +80,7 @@ func main() {
 	}
 	filePath := args[0]
 
-	storage, close, err := storage.NewStorage(titanURL, apiKey)
+	storage, close, err := storage.Initialize(titanURL, apiKey)
 	if err != nil {
 		fmt.Println("NewSchedulerAPI error ", err.Error())
 		return

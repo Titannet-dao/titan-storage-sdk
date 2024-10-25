@@ -8,8 +8,9 @@ import (
 	"os"
 	"time"
 
-	storage "github.com/Filecoin-Titan/titan-storage-sdk"
+	storage "github.com/Titannet-dao/titan-storage-sdk"
 	"github.com/spf13/cobra"
+	"github.com/spf13/cobra/doc"
 )
 
 func getTitanURLAndAPIKeyFromEnv() (string, string, error) {
@@ -60,10 +61,12 @@ var uploadCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		s, err := storage.NewStorage(&storage.Config{TitanURL: titanURL, APIKey: apiKey, AreaID: getAreaIDFromEnv()})
+		s, err := storage.Initialize(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
 		if err != nil {
-			log.Fatal("NewStorage error ", err)
+			log.Fatal("Initialize error ", err)
 		}
+
+		s.SetAreas(context.Background(), []string{getAreaIDFromEnv()})
 
 		startTime := time.Now()
 		fileSize := int64(0)
@@ -105,9 +108,9 @@ var listFilesCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		s, err := storage.NewStorage(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
+		s, err := storage.Initialize(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
 		if err != nil {
-			log.Fatal("NewStorage error ", err)
+			log.Fatal("Initialize error ", err)
 		}
 
 		rets, err := s.ListUserAssets(context.Background(), groupID, pageSize, page)
@@ -161,9 +164,9 @@ var getFileCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		s, err := storage.NewStorage(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
+		s, err := storage.Initialize(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
 		if err != nil {
-			log.Fatal("NewStorage error ", err)
+			log.Fatal("Initialize error ", err)
 		}
 
 		reader, _, err := s.GetFileWithCid(context.Background(), cid)
@@ -223,9 +226,9 @@ var deleteFileCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		s, err := storage.NewStorage(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
+		s, err := storage.Initialize(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
 		if err != nil {
-			log.Fatal("NewStorage error ", err)
+			log.Fatal("Initialize error ", err)
 		}
 
 		err = s.Delete(context.Background(), rootCID)
@@ -239,7 +242,7 @@ var deleteFileCmd = &cobra.Command{
 
 var getURLCmd = &cobra.Command{
 	Use:     "url",
-	Short:   "get file ur",
+	Short:   "get file url by cid",
 	Example: "url your-file-cid",
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) == 0 {
@@ -253,9 +256,9 @@ var getURLCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		s, err := storage.NewStorage(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
+		s, err := storage.Initialize(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
 		if err != nil {
-			log.Fatal("NewStorage error ", err)
+			log.Fatal("Initialize error ", err)
 		}
 
 		url, err := s.GetURL(context.Background(), rootCID)
@@ -267,12 +270,12 @@ var getURLCmd = &cobra.Command{
 	},
 }
 
-var groupCmd = &cobra.Command{
-	Use:   "group",
-	Short: "Manage groups",
+var folderCmd = &cobra.Command{
+	Use:   "folder",
+	Short: "Manage folders",
 }
 
-var createGroupCmd = &cobra.Command{
+var createFolderCmd = &cobra.Command{
 	Use:   "create",
 	Short: "create --name abc --pid 0",
 	Run: func(cmd *cobra.Command, args []string) {
@@ -286,9 +289,9 @@ var createGroupCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		s, err := storage.NewStorage(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
+		s, err := storage.Initialize(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
 		if err != nil {
-			log.Fatal("NewStorage error ", err)
+			log.Fatal("Initialize error ", err)
 		}
 
 		err = s.CreateGroup(cmd.Context(), name, parentID)
@@ -299,7 +302,7 @@ var createGroupCmd = &cobra.Command{
 	},
 }
 
-var listGroupCmd = &cobra.Command{
+var listFolderCmd = &cobra.Command{
 	Use:   "list",
 	Short: "list --parentID 0 -s 0 -e 20",
 	Run: func(cmd *cobra.Command, args []string) {
@@ -317,9 +320,9 @@ var listGroupCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		s, err := storage.NewStorage(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
+		s, err := storage.Initialize(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
 		if err != nil {
-			log.Fatal("NewStorage error ", err)
+			log.Fatal("Initialize error ", err)
 		}
 
 		rsp, err := s.ListGroups(cmd.Context(), parentID, count, start)
@@ -358,25 +361,36 @@ var listGroupCmd = &cobra.Command{
 	},
 }
 
-var deleteGroupCmd = &cobra.Command{
+var deleteFolderCmd = &cobra.Command{
 	Use:   "delete",
 	Short: "Delete a group",
 	Run: func(cmd *cobra.Command, args []string) {
-		parentID, _ := cmd.Flags().GetInt("groupID")
+		parentID, _ := cmd.Flags().GetInt("folderID")
 
 		titanURL, apiKey, err := getTitanURLAndAPIKeyFromEnv()
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		s, err := storage.NewStorage(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
+		s, err := storage.Initialize(&storage.Config{TitanURL: titanURL, APIKey: apiKey})
 		if err != nil {
-			log.Fatal("NewStorage error ", err)
+			log.Fatal("Initialize error ", err)
 		}
 
 		err = s.DeleteGroup(cmd.Context(), parentID)
 		if err != nil {
 			log.Fatal("DeleteGroup ", err)
+		}
+	},
+}
+
+var docCmd = &cobra.Command{
+	Use:   "gendoc",
+	Short: "Generate markdown documentation",
+	Run: func(cmd *cobra.Command, args []string) {
+		err := doc.GenMarkdownTree(rootCmd, "./")
+		if err != nil {
+			log.Fatal(err)
 		}
 	},
 }
@@ -391,14 +405,14 @@ func init() {
 	getFileCmd.Flags().String("cid", "", "the cid of file")
 	getFileCmd.Flags().String("out", "", "the path to save file")
 
-	createGroupCmd.Flags().StringP("name", "n", "", "special the name for group")
-	createGroupCmd.Flags().Int("parentID", 0, "special the parent for group")
+	createFolderCmd.Flags().StringP("name", "n", "", "special the name for group")
+	createFolderCmd.Flags().Int("parentID", 0, "special the parent for group")
 
-	listGroupCmd.Flags().Int("parentID", 0, "special the parent for group")
-	listGroupCmd.Flags().IntP("start", "s", 0, "special the start for list")
-	listGroupCmd.Flags().IntP("end", "e", 20, "special the end for list")
+	listFolderCmd.Flags().Int("parentID", 0, "special the parent for group")
+	listFolderCmd.Flags().IntP("start", "s", 0, "special the start for list")
+	listFolderCmd.Flags().IntP("end", "e", 20, "special the end for list")
 
-	deleteGroupCmd.Flags().Int("groupID", 0, "special the group id")
+	deleteFolderCmd.Flags().Int("groupID", 0, "special the group id")
 }
 
 func Execute() {
@@ -408,11 +422,12 @@ func Execute() {
 	rootCmd.AddCommand(getFileCmd)
 	rootCmd.AddCommand(deleteFileCmd)
 	rootCmd.AddCommand(getURLCmd)
+	rootCmd.AddCommand(folderCmd)
+	rootCmd.AddCommand(docCmd)
 
-	groupCmd.AddCommand(createGroupCmd)
-	groupCmd.AddCommand(listGroupCmd)
-	groupCmd.AddCommand(deleteGroupCmd)
-	rootCmd.AddCommand(groupCmd)
+	folderCmd.AddCommand(createFolderCmd)
+	folderCmd.AddCommand(listFolderCmd)
+	folderCmd.AddCommand(deleteFolderCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io"
 
-	storage "github.com/Filecoin-Titan/titan-storage-sdk"
+	storage "github.com/Titannet-dao/titan-storage-sdk"
 )
 
 type ProgressHandler interface {
@@ -17,7 +17,7 @@ type ProgressHandler interface {
 var storage_api storage.Storage
 
 func StorageInit(titanURL string, apiKey string, groupid int) (err error) {
-	storage_api, err = storage.NewStorage(&storage.Config{TitanURL: titanURL, APIKey: apiKey, GroupID: groupid})
+	storage_api, err = storage.Initialize(&storage.Config{TitanURL: titanURL, APIKey: apiKey, GroupID: groupid})
 	return
 }
 

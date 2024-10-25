@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Filecoin-Titan/titan-storage-sdk/client"
-	"github.com/Filecoin-Titan/titan-storage-sdk/request"
+	"github.com/Titannet-dao/titan-storage-sdk/client"
+	"github.com/Titannet-dao/titan-storage-sdk/request"
 	"github.com/eikenb/pipeat"
 	logging "github.com/ipfs/go-log"
 )
@@ -40,20 +40,20 @@ func New(size int64) *Range {
 	}
 }
 
-func (r *Range) GetFile(ctx context.Context, resources *client.ShareAssetResult) (io.ReadCloser, error) {
+func (r *Range) GetFile(ctx context.Context, resources *client.ShareAssetResult) (io.ReadCloser, int64, error) {
 	workerChan, err := r.makeWorkerChan(ctx, resources)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	fileSize, err := r.getFileSize(ctx, workerChan)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	reader, writer, err := pipeat.Pipe()
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	(&dispatcher{
@@ -69,7 +69,7 @@ func (r *Range) GetFile(ctx context.Context, resources *client.ShareAssetResult)
 		},
 	}).run(ctx)
 
-	return reader, nil
+	return reader, fileSize, nil
 }
 
 func (r *Range) getFileSize(ctx context.Context, workerChan chan worker) (int64, error) {
@@ -87,7 +87,8 @@ func (r *Range) getFileSize(ctx context.Context, workerChan chan worker) (int64,
 				continue
 			}
 			req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", start, start+size))
-			resp, err := w.c.Do(req)
+			// resp, err := w.c.Do(req)
+			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				log.Errorf("fetch failed: %v", err)
 				continue
@@ -105,7 +106,7 @@ func (r *Range) getFileSize(ctx context.Context, workerChan chan worker) (int64,
 				}
 				return strconv.ParseInt(subs[1], 10, 64)
 			}
-
+			//"HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain; charset=utf-8\r\nConnection: close\r\n\r\n400 Bad Requestarset=utf-8\r\n\r\n{\"jsonrpc\":\"2.0\",\"result\":{\"Version\":\"0.1.21+git.5b4fc64+linux-amd64\",\"APIVersion\":65536,\"BlockDelay\":0},\"id\":\"1\"}\n\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00...+3584 more"
 		case <-ctx.Done():
 			return 0, ctx.Err()
 		}
@@ -151,7 +152,7 @@ func (r *Range) makeWorkerChan(ctx context.Context, res *client.ShareAssetResult
 			}
 
 			workerChan <- worker{
-				c: client,
+				// c: client,
 				e: e,
 			}
 		}(endpoint)
